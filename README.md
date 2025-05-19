@@ -11,11 +11,11 @@ Healthcare Agent Orchestrator is a code sample to help you build an agent inte
 - Demonstrates the use of the Healthcare Agent Orchestrator for solving complex tasks.
 - Facilitates modular and scalable agent-based solutions for diverse healthcare needs.
 - Provides tools for creating and managing specialized agents for specific tasks.
-- Showcases the application of multmodal AI in healthcare scenarios.
+- Showcases the application of multimodal AI in healthcare scenarios.
 - Supports adding your own data for agents to process and analyze.
 - Integrates with Copilot Studio through Microsoft Cloud for Healthcare.
 - Enables integration with Microsoft Teams for collaborative workflows.
-- Highlights interoperability with Azure services and specalized healthcare AI models such as [CxrReportGen](https://ai.azure.com/explore/models/CxrReportGen/version/7/registry/azureml).
+- Highlights interoperability with Azure services and specalized healthcare AI models such as [CXRReportGen](https://aka.ms/cxrreportgenmodelcard).
 
 ## Solution Architecture
 ![Solution Architecture](media/architecture.png)
@@ -208,9 +208,9 @@ azd down --purge
 This command will permanently delete all Azure resources created during deployment, including resource groups, managed identities, storage accounts, endpoints, and other associated services.
 
 
-## Resources
+## Guidance
 
-### Guidance 
+### Documentation for Healthcare Agent Orchestrator 
 
 - [User Guide](./docs/user_guide.md) and [Documentation Index](docs/README.md)
 - [Agent Development Guide](./docs/agent_development.md) for building modular solutions
@@ -238,7 +238,7 @@ This command will permanently delete all Azure resources created during deployme
 - [What is the Bot Framework SDK?
 ](https://learn.microsoft.com/en-us/azure/bot-service/bot-service-overview?view=azure-bot-service-4.0)
 
-## Documentation For Azure Resources Deployed
+### Documentation For Azure Resources Deployed
 
 Running through the installation will deploy:
 - 1 [Azure AI Online endpoints](https://learn.microsoft.com/en-us/azure/machine-learning/concept-endpoints-online?view=azureml-api-2)
