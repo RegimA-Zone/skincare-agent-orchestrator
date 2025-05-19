@@ -210,7 +210,7 @@ This command will permanently delete all Azure resources created during deployme
 
 ## Resources
 
-### Healthcare Agent Orchestrator Documentation
+### Guidance 
 
 - [User Guide](./docs/user_guide.md) and [Documentation Index](docs/README.md)
 - [Agent Development Guide](./docs/agent_development.md) for building modular solutions
