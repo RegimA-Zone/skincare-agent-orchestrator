@@ -3,7 +3,7 @@
 
 import os
 
-from azure.identity import AzureCliCredential, ManagedIdentityCredential
+from azure.identity import ManagedIdentityCredential
 from azure.storage.blob.aio import BlobServiceClient
 from botbuilder.integration.aiohttp import CloudAdapter, ConfigurationBotFrameworkAuthentication
 from dotenv import load_dotenv
@@ -67,7 +67,23 @@ def create_app(
     return app
 
 
-app_context = create_app_context()
+# Set up service authentication
+credential = ManagedIdentityCredential(
+    client_id=os.getenv("AZURE_CLIENT_ID")
+)
+
+# Set up blob service client
+blob_service_client = BlobServiceClient(
+    account_url=os.getenv("APP_BLOB_STORAGE_ENDPOINT"),
+    credential=credential,
+)
+data_access = DataAccess(blob_service_client)
+
+turn_contexts = {}
+
+# Load agent configuration
+scenario = os.getenv("SCENARIO")
+agent_config = load_agent_config(scenario)
 
 # Create Teams specific objects
 adapters = {
