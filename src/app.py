@@ -15,7 +15,7 @@ from bots import AssistantBot, MagenticBot
 from bots.show_typing_middleware import ShowTypingMiddleware
 from config import DefaultConfig, load_agent_config, setup_logging
 from data_models.app_context import AppContext
-from data_models.data_access import create_data_access
+from data_models.data_access import DataAccess
 from mcp_app import create_fast_mcp_app
 from routes.api.messages import messages_routes
 from routes.patient_data.patient_data_routes import patient_data_routes
@@ -35,16 +35,14 @@ def create_app_context():
     agent_config = load_agent_config(scenario)
 
     # Load Azure Credential
-    credential = ManagedIdentityCredential(client_id=os.getenv("AZURE_CLIENT_ID")) \
-        if os.getenv("WEBSITE_SITE_NAME") is not None \
-        else AzureCliCredential()   # used for local development
+    credential = ManagedIdentityCredential(client_id=os.getenv("AZURE_CLIENT_ID"))
 
     # Setup data access
     blob_service_client = BlobServiceClient(
         account_url=os.getenv("APP_BLOB_STORAGE_ENDPOINT"),
         credential=credential,
     )
-    data_access = create_data_access(blob_service_client, credential)
+    data_access = DataAccess(blob_service_client)
 
     return AppContext(
         all_agent_configs=agent_config,
@@ -56,34 +54,18 @@ def create_app_context():
 
 def create_app(
     bots: dict,
-    app_context: AppContext,
+    app_ctx: AppContext,
 ) -> FastAPI:
     app = FastAPI()
     app.include_router(messages_routes(adapters, bots))
-    app.include_router(patient_data_routes(app_context.blob_service_client))
-    app.include_router(patient_data_answer_source_routes(app_context.data_access))
-    app.include_router(patient_timeline_entry_source_routes(app_context.data_access))
+    app.include_router(patient_data_routes(app_ctx.blob_service_client))
+    app.include_router(patient_data_answer_source_routes(app_ctx.data_access))
+    app.include_router(patient_timeline_entry_source_routes(app_ctx.data_access))
 
     return app
 
 
-# Set up service authentication
-credential = ManagedIdentityCredential(
-    client_id=os.getenv("AZURE_CLIENT_ID")
-)
-
-# Set up blob service client
-blob_service_client = BlobServiceClient(
-    account_url=os.getenv("APP_BLOB_STORAGE_ENDPOINT"),
-    credential=credential,
-)
-data_access = DataAccess(blob_service_client)
-
-turn_contexts = {}
-
-# Load agent configuration
-scenario = os.getenv("SCENARIO")
-agent_config = load_agent_config(scenario)
+app_context = create_app_context()
 
 # Create Teams specific objects
 adapters = {
@@ -92,6 +74,7 @@ adapters = {
     for agent in app_context.all_agent_configs
 }
 bot_config = {
+    "all_agents": app_context.all_agent_configs,
     "adapters": adapters,
     "app_context": app_context,
     "turn_contexts": {}
