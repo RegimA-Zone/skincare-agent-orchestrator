@@ -66,6 +66,12 @@ class MedImageParsePlugin:
         self.url = config.agent_config["hls_model_endpoint"].get("med_image_parse")
         self.root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+    def __init__(self, config: PluginConfiguration):
+        self.azureml_token_provider = config.azureml_token_provider
+        self.data_access = config.data_access
+        self.url = config.agent_config["hls_model_endpoint"].get("med_image_parse")
+        self.root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
     @kernel_function(description="Calculates the tumor size")
     async def calculate_tumor_size(self, patient_id: str, filename: str, prompt: str):
         image_stream = await self.data_access.image_accessor.read(patient_id, filename)
