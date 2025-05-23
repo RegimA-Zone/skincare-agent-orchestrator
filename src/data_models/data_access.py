@@ -81,7 +81,6 @@ class BlobSasDelegate(UserDelegationKeyDelegate):
 
 @dataclass(frozen=True)
 class DataAccess:
-    """ Data access layer for the application. """
     blob_sas_delegate: BlobSasDelegate
     chat_artifact_accessor: ChatArtifactAccessor
     chat_context_accessor: ChatContextAccessor
@@ -93,13 +92,10 @@ def create_data_access(
     blob_service_client: BlobServiceClient,
     credential: AsyncTokenCredential
 ) -> DataAccess:
-    """ Factory function to create a DataAccess object. """
-    # Create clinical note accessor based on the source
     clinical_notes_source = os.getenv("CLINICAL_NOTES_SOURCE")
     if clinical_notes_source == "fhir":
-        # Note: You can change FhirClinicalNoteAccessor instantiation to use different authentication methods
-        clinical_note_accessor = FhirClinicalNoteAccessor.from_credential(
-            fhir_url=os.getenv("FHIR_SERVICE_ENDPOINT"),
+        clinical_note_accessor = FhirClinicalNoteAccessor(
+            fhir_url=os.getenv("FHIR_SERVER_URL"),
             credential=credential,
         )
     else:

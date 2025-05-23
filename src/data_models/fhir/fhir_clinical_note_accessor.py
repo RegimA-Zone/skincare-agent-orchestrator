@@ -1,61 +1,27 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT license.
-
 import asyncio
 import base64
 import json
-import logging
 from typing import Any, Callable, Coroutine, Dict, List
 
-import aiohttp
 import requests
 from azure.core.credentials_async import AsyncTokenCredential
 from azure.identity.aio import get_bearer_token_provider
 
-logger = logging.getLogger(__name__)
-
 
 class FhirClinicalNoteAccessor:
-
-    @staticmethod
-    def from_credential(fhir_url: str, credential: AsyncTokenCredential) -> 'FhirClinicalNoteAccessor':
-        """ Creates an instance of FhirClinicalNoteAccessor using Azure credential."""
-        token_provider = get_bearer_token_provider(credential, f"{fhir_url}/.default")
-        return FhirClinicalNoteAccessor(fhir_url, token_provider)
-
-    @staticmethod
-    def from_client_secret(tenant_id: str, client_id: str, client_secret: str, fhir_url: str) -> 'FhirClinicalNoteAccessor':
-        """ Creates an instance of FhirClinicalNoteAccessor using client secret."""
-        async def bearer_token_provider() -> str:
-            token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/token"
-            headers = {"Content-Type": "application/x-www-form-urlencoded"}
-            data = {
-                "grant_type": "client_credentials",
-                "resource": fhir_url,
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "scope": f"{fhir_url}/.default"
-            }
-            async with aiohttp.request('POST', token_url, json=data, headers=headers) as resp:
-                resp.raise_for_status()
-                return await resp.json()["access_token"]
-
-        return FhirClinicalNoteAccessor(fhir_url, bearer_token_provider)
-
-    def __init__(self, fhir_url: str, bearer_token_provider: Callable[[], Coroutine[Any, Any, str]]):
+    def __init__(self, fhir_url: str, credential: AsyncTokenCredential):
         """
         Initializes the FhirClinicalNoteAccessor.
 
         :param fhir_url: The base URL of the FHIR server.
         :param credential: The Azure credential for authentication.
         """
-        if not fhir_url:
-            raise ValueError("FHIR URL is required.")
-        if not bearer_token_provider:
-            raise ValueError("bearer_token_provider is required.")
-
         self.fhir_url = fhir_url
-        self.bearer_token_provider = bearer_token_provider
+        self.credential = credential
+
+    @property
+    def fhir_token_provider(self) -> Callable[[], Coroutine[Any, Any, str]]:
+        return get_bearer_token_provider(self.credential, f"{self.fhir_url}/.default")
 
     async def get_headers(self) -> dict:
         """
@@ -64,7 +30,7 @@ class FhirClinicalNoteAccessor:
         :return: A dictionary of headers.
         """
         return {
-            "Authorization": f"Bearer {await self.bearer_token_provider()}",
+            "Authorization": f"Bearer {await self.fhir_token_provider()}",
             "Content-Type": "application/json",
         }
 
@@ -118,7 +84,10 @@ class FhirClinicalNoteAccessor:
                 continue
             if "reference" not in document_reference["resource"]["subject"]:
                 continue
+
+            print(document_reference["resource"]["subject"]["reference"])
             if patient_id not in document_reference["resource"]["subject"]["reference"]:
+                print(document_reference["resource"]["subject"]["reference"])
                 continue
 
             entries.append({
@@ -156,7 +125,6 @@ class FhirClinicalNoteAccessor:
         :return: A list of clinical note contents.
         """
         metadata_list = await self.get_metadata_list(patient_id)
-
         notes = []
         batch_size = 10
         for i in range(0, len(metadata_list), batch_size):
