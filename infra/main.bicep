@@ -236,30 +236,20 @@ module m_appStorageAccount 'modules/storageAccount.bicep' = {
   }
 }
 
-var isFhirServiceEnabled = clinicalNotesSource == 'fhir'
-
-module m_fhirService 'modules/fhirService.bicep' = if (isFhirServiceEnabled) {
+module m_fhirService 'modules/fhirService.bicep' = if (clinicalNotesSource == 'fhir') {
   name: 'deploy_fhir_service'
   params: {
     workspaceName: names.ahdsWorkspaceName
     fhirServiceName: names.ahdsFhirServiceName
     tenantId: subscription().tenantId
-    dataContributors: [
-      {
-        id: myPrincipalId
-        type: myPrincipalType
-      }
-    ]
-    dataReaders: [
-      {
-        id: m_msi[0].outputs.msiPrincipalID
+    grantAccessTo: [
+      for i in range(0, length(agents)): {
+        id: m_msi[i].outputs.msiPrincipalID
         type: 'ServicePrincipal'
       }
     ]
   }
 }
-
-var fhirServiceEndpoint = isFhirServiceEnabled ? m_fhirService.outputs.endpoint : ''
 
 module m_app 'modules/appservice.bicep' = {
   name: 'deploy_app'
@@ -287,7 +277,7 @@ module m_app 'modules/appservice.bicep' = {
     keyVaultName: m_keyVault.outputs.keyVaultName
     scenario: scenario
     clinicalNotesSource: clinicalNotesSource
-    fhirServiceEndpoint: fhirServiceEndpoint
+    fhirServiceEndpoint: m_fhirService.outputs.endpoint
   }
 }
 
