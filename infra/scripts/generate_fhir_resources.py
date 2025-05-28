@@ -15,7 +15,7 @@ def create_patient_resource(patient_folder: str):
             }
         ],
         "gender": "female",
-        "birthDate": "1962-03-20"
+        "birthDate": "1967-05-05"
     }
 
 def create_document_reference(fhir_patient_id, note_id: str, note_content: str):
@@ -34,11 +34,11 @@ def create_document_reference(fhir_patient_id, note_id: str, note_content: str):
                 }
             }
         ],
-        "date": "1977-09-05T15:43:52.418-05:00",
+        "date": create_last_updated_formatted_date(),
         "id": note_id,
         "identifier": [],
         "resourceType": "DocumentReference",
-        "status": "superseded",
+        "status": "current",
         "subject": {
             "reference": f"Patient/{fhir_patient_id}"
         },
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     for patient_folder in patient_folders:
         folder_path = os.path.join(os.getcwd(), root, patient_folder)
         if os.path.isdir(folder_path):
-            
+
             patient_resource = create_patient_resource(patient_folder)
             patient_file_name = f"patients/{patient_folder}.json"
             patient_file_path = os.path.join(os.getcwd(), patient_output_dir, patient_file_name)
