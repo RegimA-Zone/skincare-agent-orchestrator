@@ -65,19 +65,19 @@ def create_last_updated_formatted_date():
 
 if __name__ == "__main__":
 
-    root = "infra/patient_data"
-    target = "ahds"
+    patient_input_dir = os.path.join(os.getcwd(), "infra", "patient_data")
     intermediate_folder = "ahds"
-    patient_output_dir = f"infra/fhir_resources/{intermediate_folder}"
-    document_reference_output_dir = f"infra/fhir_resources/{intermediate_folder}/"
-    patient_folders = os.listdir(root)
+    patient_output_dir = os.path.join(os.getcwd(), "output", "fhir_resources", intermediate_folder)
+    document_reference_output_dir = os.path.join(os.getcwd(), "output", "fhir_resources", intermediate_folder)
+    
+    patient_folders = os.listdir(patient_input_dir)
 
     for patient_folder in patient_folders:
-        folder_path = os.path.join(os.getcwd(), root, patient_folder)
+        folder_path = os.path.join(os.getcwd(), patient_input_dir, patient_folder)
         if os.path.isdir(folder_path):
 
             patient_resource = create_patient_resource(patient_folder)
-            patient_file_name = f"patients/{patient_folder}.json"
+            patient_file_name = os.path.join("patients", f"{patient_folder}.json")
             patient_file_path = os.path.join(os.getcwd(), patient_output_dir, patient_file_name)
             
             if os.path.exists(os.path.dirname(patient_file_path)) == False:
@@ -87,13 +87,13 @@ if __name__ == "__main__":
                 patient_file.write(json.dumps(patient_resource) + "\n")
             
             fhir_patient_id = patient_resource["id"]
-            clinical_notes = os.listdir(os.path.join(root, patient_folder, "clinical_notes"))
+            clinical_notes = os.listdir(os.path.join(patient_input_dir, patient_folder, "clinical_notes"))
             
             for clinical_note in clinical_notes:
-                clinical_note_file = os.path.join(root, patient_folder, "clinical_notes", clinical_note)
+                clinical_note_file = os.path.join(patient_input_dir, patient_folder, "clinical_notes", clinical_note)
                 
                 with open(clinical_note_file, "r") as f:
-                    document_reference_file_name = f"document_references/{clinical_note}"
+                    document_reference_file_name = os.path.join("document_references", clinical_note)
                     document_reference_file_path = os.path.join(os.getcwd(), document_reference_output_dir, document_reference_file_name)
                     
                     if os.path.exists(os.path.dirname(document_reference_file_path)) == False:

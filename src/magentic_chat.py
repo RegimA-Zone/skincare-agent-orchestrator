@@ -11,7 +11,6 @@ from semantic_kernel.agents import Agent, AgentGroupChat
 from data_models.app_context import AppContext
 
 
-
 def convert_tools(agent: Agent):
     tools = []
     for plugin in agent.kernel.plugins.values():

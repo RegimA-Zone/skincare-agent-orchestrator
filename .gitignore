@@ -18,5 +18,4 @@ output
 
 src/public/output_data
 infra/config
-infra/fhir_resources
 data

@@ -2,8 +2,9 @@ import asyncio
 import json
 import os
 from typing import Any, Callable, Coroutine
+from dotenv import load_dotenv
 import requests
-from azure.identity import AzureCliCredential, ManagedIdentityCredential
+from azure.identity import AzureCliCredential
 from azure.identity.aio import get_bearer_token_provider
 
 def get_access_token(tenant_id, client_id, client_secret, fhir_url):
@@ -152,17 +153,15 @@ async def get_bearer_token_using_client_secret(tenant_id: str, client_id: str, c
     return response.json()["access_token"]
 
 async def main():
-
-    credential = ManagedIdentityCredential(client_id=os.getenv("AZURE_CLIENT_ID")) \
-        if os.getenv("WEBSITE_SITE_NAME") is not None \
-        else AzureCliCredential()
     
+    load_dotenv("src/.env")
+    credential = AzureCliCredential()
     fhir_url = os.getenv("FHIR_SERVICE_ENDPOINT")
     get_access_token = get_bearer_token_provider(credential, f"{fhir_url}/.default")
 
-    root_folder = "infra/fhir_resources"
-    patient_file_path = f"{root_folder}/ahds/patients"
-    document_reference_file_path = f"{root_folder}/ahds/document_references"
+    root_folder = os.path.join(os.getcwd(), "output", "fhir_resources")
+    patient_file_path = os.path.join(root_folder, "ahds", "patients")
+    document_reference_file_path = os.path.join(root_folder, "ahds", "document_references")
 
     try:
         responses = await post_resources_in_batches(patient_file_path, fhir_url, "Patient", get_access_token, id_map={}, batch_size=10)
