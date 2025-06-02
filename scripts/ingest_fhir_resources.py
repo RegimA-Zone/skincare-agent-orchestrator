@@ -57,13 +57,42 @@ def load_resources(path):
     else:
         raise ValueError(f"Invalid path: {path}")
 
+async def patient_with_given_name_exists(
+        fhir_url: str, 
+        get_access_token: Callable[[], Coroutine[Any, Any, str]],
+        resource: dict) -> bool:
+    """
+    Checks to see if a patient with the same name already exists in the FHIR server.
+    """
+    patient_name = resource['name'][0]['given'][0]
+    filtered_patients = []
+    try:
+        url = f"{fhir_url}/Patient?name={patient_name}"
+        token = await get_access_token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        patients = response.json().get("entry", [])
+
+        filtered_patients = [p for p in patients if p["resource"]['name'][0]['given'][0] == patient_name]
+
+    except Exception as e:
+        print(f"An error occurred while checking if patient exists: {e}")
+    finally:
+        return len(filtered_patients) > 0
+
 async def post_resources_in_batches(
         file_path: str, 
         fhir_url: str, 
         resource_type: str, 
         get_access_token,
         id_map: dict = {},
-        batch_size: int = 10):
+        batch_size: int = 10,
+        resource_exists_async_fn: Callable[[dict], Coroutine[Any, Any, bool]] = None,
+        id_map_required: bool = False):
     """
     Posts resources in batches to the FHIR server.
     :param file_path: Path to a file or folder containing resources.
@@ -89,7 +118,18 @@ async def post_resources_in_batches(
                     found_id = True
                     new_id = id_map[current_id]
                     resource["subject"]["reference"] = f"Patient/{new_id}"
-            if len(id_map) == 0 or found_id:
+            
+            # Resource was found in the id_map or does not require id_map
+            should_include = ((not id_map_required and len(id_map) == 0) or found_id)
+
+            # Check if the resource already exists in the FHIR server           
+            if should_include and resource_exists_async_fn is not None:
+                exists = await resource_exists_async_fn(resource)
+                if exists:
+                    print(f"{resource_type} resource with id {resource['id']} already exists. Skipping.")
+                    continue
+            
+            if should_include:
                 batch_request["entry"].append({
                     "resource": resource,
                     "request": {
@@ -106,6 +146,8 @@ async def post_resources_in_batches(
                     print(f"Posted batch of {batch_size} {resource_type} resources.")
                     batch_request["entry"] = []  # Reset the batch
                     count = 0
+            else:
+                print(f"Skipping {resource_type} resource with id {resource['id']} as it does not match the id_map or already exists on the server.")
 
         # Post any remaining resources in the last batch
         if batch_request["entry"] and (len(id_map) == 0 or found_id):
@@ -160,16 +202,27 @@ async def main():
     get_access_token = get_bearer_token_provider(credential, f"{fhir_url}/.default")
 
     root_folder = os.path.join(os.getcwd(), "output", "fhir_resources")
-    patient_file_path = os.path.join(root_folder, "ahds", "patients")
-    document_reference_file_path = os.path.join(root_folder, "ahds", "document_references")
+    patient_file_path = os.path.join(root_folder, "patients")
+    document_reference_file_path = os.path.join(root_folder, "document_references")
 
     try:
-        responses = await post_resources_in_batches(patient_file_path, fhir_url, "Patient", get_access_token, id_map={}, batch_size=10)
+        responses = await post_resources_in_batches(
+            patient_file_path, 
+            fhir_url, 
+            "Patient", 
+            get_access_token,
+            resource_exists_async_fn= lambda r: patient_with_given_name_exists(fhir_url, get_access_token, r))
         
         id_map = create_patient_id_map(responses)
 
-        responses = await post_resources_in_batches(document_reference_file_path, fhir_url, "DocumentReference",
-                                  get_access_token, id_map, batch_size=10)
+        responses = await post_resources_in_batches(
+            document_reference_file_path,
+            fhir_url,
+            "DocumentReference",
+            get_access_token,
+            id_map,
+            batch_size=10,
+            id_map_required=True)
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")

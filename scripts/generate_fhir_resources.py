@@ -65,14 +65,14 @@ def create_last_updated_formatted_date():
 
 if __name__ == "__main__":
 
+    output_dir = os.path.join("output", "fhir_resources")
     patient_input_dir = os.path.join(os.getcwd(), "infra", "patient_data")
-    intermediate_folder = "ahds"
-    patient_output_dir = os.path.join(os.getcwd(), "output", "fhir_resources", intermediate_folder)
-    document_reference_output_dir = os.path.join(os.getcwd(), "output", "fhir_resources", intermediate_folder)
+    patient_output_dir = os.path.join(os.getcwd(), output_dir)
+    document_reference_output_dir = os.path.join(os.getcwd(), output_dir)
     
-    patient_folders = os.listdir(patient_input_dir)
+    patient_data_items = os.listdir(patient_input_dir)
 
-    for patient_folder in patient_folders:
+    for patient_folder in patient_data_items:
         folder_path = os.path.join(os.getcwd(), patient_input_dir, patient_folder)
         if os.path.isdir(folder_path):
 
@@ -80,8 +80,7 @@ if __name__ == "__main__":
             patient_file_name = os.path.join("patients", f"{patient_folder}.json")
             patient_file_path = os.path.join(os.getcwd(), patient_output_dir, patient_file_name)
             
-            if os.path.exists(os.path.dirname(patient_file_path)) == False:
-                os.makedirs(os.path.dirname(patient_file_path))
+            os.makedirs(os.path.dirname(patient_file_path), exist_ok=True)
             
             with open(patient_file_path, "a") as patient_file:
                 patient_file.write(json.dumps(patient_resource) + "\n")
@@ -96,8 +95,7 @@ if __name__ == "__main__":
                     document_reference_file_name = os.path.join("document_references", clinical_note)
                     document_reference_file_path = os.path.join(os.getcwd(), document_reference_output_dir, document_reference_file_name)
                     
-                    if os.path.exists(os.path.dirname(document_reference_file_path)) == False:
-                        os.makedirs(os.path.dirname(document_reference_file_path))
+                    os.makedirs(os.path.dirname(document_reference_file_path), exist_ok=True)
                     
                     with open(document_reference_file_path, "a") as document_reference_file:
                         note = f.read()
