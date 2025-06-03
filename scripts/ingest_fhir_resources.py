@@ -1,27 +1,14 @@
 import asyncio
 import json
 import os
+import re
 from typing import Any, Callable, Coroutine
 from dotenv import load_dotenv
 import requests
 from azure.identity import AzureCliCredential
 from azure.identity.aio import get_bearer_token_provider
 
-def get_access_token(tenant_id, client_id, client_secret, fhir_url):
-    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/token"
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    data = {
-        "grant_type": "client_credentials",
-        "resource": fhir_url,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "scope": f"{fhir_url}/.default"
-    }
-    response = requests.post(token_url, headers=headers, data=data)
-    response.raise_for_status()  # Raise an error for bad responses
-    return response.json()["access_token"]
-
-async def post_fhir_resource_batch(fhir_url, resource_batch, get_access_token):
+async def post_fhir_resource_batch(fhir_url: str, resource_batch: Any, get_access_token: Coroutine[Any, Any, str]):
     """
     Posts a batch of resources to the FHIR server.
     :param resource_batch: A bundle of resources to post."""
@@ -88,7 +75,7 @@ async def post_resources_in_batches(
         file_path: str, 
         fhir_url: str, 
         resource_type: str, 
-        get_access_token,
+        get_access_token: Coroutine[Any, Any, str],
         id_map: dict = {},
         batch_size: int = 10,
         resource_exists_async_fn: Callable[[dict], Coroutine[Any, Any, bool]] = None,
@@ -97,7 +84,7 @@ async def post_resources_in_batches(
     Posts resources in batches to the FHIR server.
     :param file_path: Path to a file or folder containing resources.
     :param resource_type: The type of resource to post.
-    :param get_access_token: The token provider for the FHIR server.
+    :param get_access_token: A couroutine to get an access token.
     :param batch_size: The number of resources to post in each batch."""
     if os.path.exists(file_path):
         batch_request = {
@@ -177,28 +164,45 @@ async def get_headers(bearer_token_provider: Callable[[], Coroutine[Any, Any, st
         "Content-Type": "application/json",
     }
 
-async def get_bearer_token_using_client_secret(tenant_id: str, client_id: str, client_secret: str, fhir_url: str) -> str:
+def is_default_fhir_url(fhir_url: str) -> bool:
     """
-        Helper method to get a bearer token using client credentials.
+    Checks if the given fhir_url matches the default Azure Health Data Services FHIR endpoint pattern
+    for the current environment, including a 3-character alphanumeric unique suffix.
+
+    The pattern is:
+      https://ahds<env><suffix>-fhir<env><suffix>.fhir.azurehealthcareapis.com
+    where <env> is AZURE_ENV_NAME and <suffix> is a 3-character alphanumeric string.
+
+    :param fhir_url: The FHIR service endpoint URL to check.
+    :return: True if it matches the default pattern, False otherwise.
     """
-    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/token"
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    data = {
-        "grant_type": "client_credentials",
-        "resource": fhir_url,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "scope": f"{fhir_url}/.default"
-    }
-    response = requests.post(token_url, headers=headers, data=data)
-    response.raise_for_status()  # Raise an error for bad responses
-    return response.json()["access_token"]
+    env_name = os.getenv("AZURE_ENV_NAME")
+    if not env_name:
+        return False
+
+    # Regex for a 3-character alphanumeric suffix
+    suffix_pattern = r"[a-zA-Z0-9]{3}"
+
+    # Build the regex pattern
+    pattern = (
+        rf"^https://ahds{re.escape(env_name)}{suffix_pattern}-fhir{re.escape(env_name)}{suffix_pattern}\.fhir\.azurehealthcareapis\.com/?$"
+    )
+
+    return re.match(pattern, fhir_url) is not None
 
 async def main():
-    
-    load_dotenv("src/.env")
+
+    if not os.getenv("AZURE_ENV_NAME"):
+        load_dotenv("src/.env")
+
     credential = AzureCliCredential()
     fhir_url = os.getenv("FHIR_SERVICE_ENDPOINT")
+
+    if not is_default_fhir_url(fhir_url):
+        print(f"The environment FHIR server endpoint ({fhir_url}) does not match the default deployed Azure Health Data Services FHIR endpoint pattern.")
+        print(f"\nThis script is intended to ingest sample data into the test server only, exiting without changes.\n")
+        return
+
     get_access_token = get_bearer_token_provider(credential, f"{fhir_url}/.default")
 
     root_folder = os.path.join(os.getcwd(), "output", "fhir_resources")
