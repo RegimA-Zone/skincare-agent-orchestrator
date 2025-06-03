@@ -164,7 +164,7 @@ async def get_headers(bearer_token_provider: Callable[[], Coroutine[Any, Any, st
         "Content-Type": "application/json",
     }
 
-def is_default_fhir_url(fhir_url: str) -> bool:
+def is_default_fhir_url(fhir_url: str, formatted_env_name: str) -> bool:
     """
     Checks if the given fhir_url matches the default Azure Health Data Services FHIR endpoint pattern
     for the current environment, including a 3-character alphanumeric unique suffix.
@@ -176,16 +176,12 @@ def is_default_fhir_url(fhir_url: str) -> bool:
     :param fhir_url: The FHIR service endpoint URL to check.
     :return: True if it matches the default pattern, False otherwise.
     """
-    env_name = os.getenv("AZURE_ENV_NAME")
-    if not env_name:
+    if not formatted_env_name:
         return False
-
-    # Regex for a 3-character alphanumeric suffix
-    suffix_pattern = r"[a-zA-Z0-9]{3}"
 
     # Build the regex pattern
     pattern = (
-        rf"^https://ahds{re.escape(env_name)}{suffix_pattern}-fhir{re.escape(env_name)}{suffix_pattern}\.fhir\.azurehealthcareapis\.com/?$"
+        rf"^https://ahds{re.escape(formatted_env_name)}([a-zA-Z0-9]+)-fhir{re.escape(formatted_env_name)}\1\.fhir\.azurehealthcareapis\.com/?$"
     )
 
     return re.match(pattern, fhir_url) is not None
@@ -197,8 +193,9 @@ async def main():
 
     credential = AzureCliCredential()
     fhir_url = os.getenv("FHIR_SERVICE_ENDPOINT")
+    formatted_env_name = os.getenv("AZURE_ENV_NAME").replace("-", "")
 
-    if not is_default_fhir_url(fhir_url):
+    if not is_default_fhir_url(fhir_url, formatted_env_name):
         print(f"The environment FHIR server endpoint ({fhir_url}) does not match the default deployed Azure Health Data Services FHIR endpoint pattern.")
         print(f"\nThis script is intended to ingest sample data into the test server only, exiting without changes.\n")
         return
