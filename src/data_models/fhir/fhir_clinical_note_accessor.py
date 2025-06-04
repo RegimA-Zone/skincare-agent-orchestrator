@@ -94,23 +94,23 @@ class FhirClinicalNoteAccessor:
         entries = []
         url = base_url
         parsed_url = urllib.parse.urlparse(url)
-        while url and len(entries) < result_count_limit:
-            print(f"Fetching from URL: {url}")
-            async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession() as session:
+            while url and len(entries) < result_count_limit:
+                logger.debug(f"Fetching from URL: {url}")
                 async with session.get(url, headers=await self.get_headers()) as response:
                     response.raise_for_status()
                     response_json = await response.json()
             
-            new_entries = extract_entries(response_json)
-            entries.extend(new_entries)
-            if len(entries) >= result_count_limit:
-                break
-            token = extract_continuation_token(response_json)
-            if token:
-                # Append or replace query string with continuation token
-                url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{token}"
-            else:
-                url = None
+                new_entries = extract_entries(response_json)
+                entries.extend(new_entries)
+                if len(entries) >= result_count_limit:
+                    break
+                token = extract_continuation_token(response_json)
+                if token:
+                    # Append or replace query string with continuation token
+                    url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}?{token}"
+                else:
+                    url = None
         return entries[:result_count_limit]
 
     async def get_patients(self) -> List[str]:
