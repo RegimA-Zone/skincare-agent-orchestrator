@@ -20,6 +20,7 @@ from data_models.app_context import AppContext
 from data_models.data_access import DataAccess
 from mcp_app import create_fast_mcp_app
 from routes.api.messages import messages_routes
+from routes.api.user import user_routes
 from routes.api.chats import chats_routes
 from routes.patient_data.patient_data_routes import patient_data_routes
 from routes.views.patient_data_answer_routes import patient_data_answer_source_routes
@@ -63,7 +64,8 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI()
     app.include_router(messages_routes(adapters, bots))
-    app.include_router(chats_routes(agent_config, data_access))
+    app.include_router(chats_routes(app_context.all_agent_configs, app_context.data_access))
+    app.include_router(user_routes(app_context.data_access))
     app.include_router(patient_data_routes(app_context.blob_service_client))
     app.include_router(patient_data_answer_source_routes(app_context.data_access))
     app.include_router(patient_timeline_entry_source_routes(app_context.data_access))
