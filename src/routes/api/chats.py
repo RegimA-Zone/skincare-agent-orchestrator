@@ -11,7 +11,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from data_models.data_access import DataAccess
+from data_models.app_context import AppContext
 import group_chat
 
 logger = logging.getLogger(__name__)
@@ -67,8 +67,12 @@ def create_json_response(content, headers=None):
         encoder=DateTimeEncoder
     )
 
-def chats_routes(agent_config: List[Dict], data_access: DataAccess):
+def chats_routes(app_context: AppContext):
     router = APIRouter()
+    
+    # Extract needed values from app_context
+    agent_config = app_context.all_agent_configs
+    data_access = app_context.data_access
     
     # Find the facilitator agent
     facilitator_agent = next((agent for agent in agent_config if agent.get("facilitator")), agent_config[0])
@@ -121,7 +125,7 @@ def chats_routes(agent_config: List[Dict], data_access: DataAccess):
             chat_context.chat_history.add_user_message(content)
             
             # Create group chat instance
-            chat, chat_context = group_chat.create_group_chat(agent_config, chat_context, data_access)
+            chat, chat_context = group_chat.create_group_chat(app_context, chat_context)
             
             # Process the message - determine target agent based on mentions
             target_agent_name = facilitator  # Default to facilitator agent

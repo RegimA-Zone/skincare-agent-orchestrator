@@ -58,7 +58,7 @@ def get_user_info_from_headers(request: Request) -> Dict:
                         claim_dict[claim_type].append(claim_value)
                 
                 # Create a ClaimsIdentity object
-                claims_identity = ClaimsIdentity(claims=claim_dict)
+                claims_identity = ClaimsIdentity(claims=claim_dict, is_authenticated=True)
                 
                 # Extract email from appropriate claims
                 email_claims = [

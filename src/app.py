@@ -64,7 +64,7 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI()
     app.include_router(messages_routes(adapters, bots))
-    app.include_router(chats_routes(app_context.all_agent_configs, app_context.data_access))
+    app.include_router(chats_routes(app_context))
     app.include_router(user_routes())
     app.include_router(patient_data_routes(app_context.blob_service_client))
     app.include_router(patient_data_answer_source_routes(app_context.data_access))
