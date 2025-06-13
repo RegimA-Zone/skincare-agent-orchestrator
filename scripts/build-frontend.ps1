@@ -90,22 +90,29 @@ function NeedRebuild {
         return $true
     }
 
-    # Get the build directory's last write time
-    $buildLastWriteTime = (Get-Item -Path $buildDir).LastWriteTime
+    # Use index.html as reference file instead of directory timestamp
+    $buildIndexFile = Join-Path -Path $buildDir -ChildPath "index.html"
+    if (-not (Test-Path -Path $buildIndexFile)) {
+        Write-Host "Build output file (index.html) doesn't exist. Build needed."
+        return $true
+    }
+    
+    # Get the build output file's last write time
+    $buildLastWriteTime = (Get-Item -Path $buildIndexFile).LastWriteTime
 
-    # Check if any source files are newer than the build directory
+    # Check if any source files are newer than the build output file
     $newerFiles = Get-ChildItem -Path $srcDir -Recurse -File | Where-Object { $_.LastWriteTime -gt $buildLastWriteTime }
     if ($null -ne $newerFiles -and $newerFiles.Count -gt 0) {
         Write-Host "Source files have changed. Build needed."
         return $true
     }
 
-    # Check if package.json is newer than build directory
-    $packageJson = Join-Path -Path $democlientDir -ChildPath "package.json"
-    if (Test-Path -Path $packageJson) {
-        $packageJsonLastWriteTime = (Get-Item -Path $packageJson).LastWriteTime
-        if ($packageJsonLastWriteTime -gt $buildLastWriteTime) {
-            Write-Host "package.json has changed. Build needed."
+    # Check if package-lock.json is newer than build output file
+    $packageLockJson = Join-Path -Path $democlientDir -ChildPath "package-lock.json"
+    if (Test-Path -Path $packageLockJson) {
+        $packageLockJsonLastWriteTime = (Get-Item -Path $packageLockJson).LastWriteTime
+        if ($packageLockJsonLastWriteTime -gt $buildLastWriteTime) {
+            Write-Host "package-lock.json has changed. Build needed."
             return $true
         }
     }
@@ -122,8 +129,8 @@ function NeedRebuild {
 
 # Install dependencies if needed
 if (-not (Test-Path -Path "node_modules") -or $args[0] -eq "--force") {
-    Write-Host "Installing dependencies..."
-    npm install
+    Write-Host "Installing dependencies from package-lock.json..."
+    npm ci
 }
 
 # Check if we need to rebuild

@@ -83,9 +83,9 @@ need_rebuild() {
         return 0
     fi
 
-    # Check if package.json is newer than build directory
-    if [ -f "package.json" ] && [ "package.json" -nt "$BUILD_DIR" ]; then
-        echo "package.json has changed. Build needed."
+    # Check if package-lock.json is newer than build directory
+    if [ -f "package-lock.json" ] && [ "package-lock.json" -nt "$BUILD_DIR" ]; then
+        echo "package-lock.json has changed. Build needed."
         return 0
     fi
     
@@ -101,8 +101,8 @@ need_rebuild() {
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ] || [ "$1" == "--force" ]; then
-    echo "Installing dependencies..."
-    npm install
+    echo "Installing dependencies from package-lock.json..."
+    npm ci
 fi
 
 # Check if we need to rebuild
