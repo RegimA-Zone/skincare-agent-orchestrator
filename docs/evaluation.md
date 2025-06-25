@@ -29,7 +29,7 @@ INITIAL_QUERIES_CSV_PATH = "./evaluation_sample_initial_queries.csv"
 SIMULATION_OUTPUT_PATH = "./simulated_chats/patient_4"
 ```
 
-To bring your own patient data and ask questions, follow the instructions in the [Data Ingestion](./data_ingestion.md#security). We also provide sample input queries in `./evaluation_sample_initial_queries.csv`, which you can use to directly test questions with the agent. 
+To bring your own patient data and ask questions, follow the instructions in the [Data Ingestion](./data_ingestion.md). We also provide sample input queries in `./evaluation_sample_initial_queries.csv`, which you can use to directly test questions with the agent. 
 Use the ChatSimulator class to create synthetic conversations with either scripted (e.g.: `ProceedUser`) or LLM-powered (e.g.: `LLMUser`) simulated users:
 
 ```python
