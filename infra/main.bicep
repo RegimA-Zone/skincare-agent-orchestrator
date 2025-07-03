@@ -85,6 +85,18 @@ param fhirServiceEndpoint string = ''
 @description('The Microsoft Fabric User Data Function Endpoint.')
 param fabricUserDataFunctionEndpoint string = ''
 
+// Network configurations
+@description('Name of the Virtual Network. Automatically generated if left blank')
+param vnetName string = ''
+@description('Name of the App Service subnet. Automatically generated if left blank')
+param appServiceSubnetName string = ''
+@description('Virtual network address prefix')
+param vnetAddressPrefix string = '10.0.0.0/16'
+@description('App service subnet address prefix')
+param appServiceSubnetAddressPrefix string = '10.0.1.0/24'
+@description('Location to deploy network resources')
+param networkLocation string = resourceGroup().location
+
 var modelName = split(model, ';')[0]
 var modelVersion = split(model, ';')[1]
 
@@ -103,6 +115,8 @@ var names = {
   keyVault: !empty(keyVaultName) ? keyVaultName : '${abbrs.keyVaultVaults}${environmentName}-${uniqueSuffix}'
   ahdsWorkspaceName: replace('ahds${environmentName}${uniqueSuffix}', '-', '')
   ahdsFhirServiceName: replace('fhir${environmentName}${uniqueSuffix}', '-', '')
+  vnet: !empty(vnetName) ? vnetName : '${abbrs.networkVirtualNetworks}${environmentName}-${uniqueSuffix}'
+  appServiceSubnet: !empty(appServiceSubnetName) ? appServiceSubnetName : 'appservice-subnet'
 }
 
 var agentConfigs = {
@@ -115,13 +129,25 @@ var allAgents = agentConfigs[scenario]
 var agents = allAgents
 
 var healthcareAgents = filter(allAgents, agent => contains(agent, 'healthcare_agent'))
-var hasHealthcareAgentNeedingRadiologyModels = contains(map(healthcareAgents, agent => toLower(agent.name)), 'radiology')
 
 module m_appServicePlan 'modules/appserviceplan.bicep' = {
   name: 'deploy_app_service_plan'
   params: {
     location: empty(appServiceLocation) ? location : appServiceLocation
     appServicePlanName: names.appPlan
+    tags: tags
+  }
+}
+
+// Network module - deploy VNet and subnets for enhanced security
+module m_network 'modules/network.bicep' = {
+  name: 'deploy_network'
+  params: {
+    location: empty(networkLocation) ? location : networkLocation
+    vnetName: names.vnet
+    appServiceSubnetName: names.appServiceSubnet
+    vnetAddressPrefix: vnetAddressPrefix
+    appServiceSubnetAddressPrefix: appServiceSubnetAddressPrefix
     tags: tags
   }
 }
@@ -173,6 +199,7 @@ module m_keyVault 'modules/aistudio/keyVault.bicep' = {
     additionalIdentities: [
       for i in range(0, length(agents)): m_msi[i].outputs.msiPrincipalID
     ]
+    appServiceSubnetId: m_network.outputs.appServiceSubnetId
   }
 }
 
@@ -199,13 +226,15 @@ module m_aihub 'modules/aistudio/aihub.bicep' = {
   }
 }
 
+//includeRadiologyModels: empty(healthcareAgents) ? true : !hasHealthcareAgentNeedingRadiologyModels
+
 module hlsModels 'modules/hlsModel.bicep' = {
   name: 'deploy_hls_models'
   params: {
     location: empty(hlsDeploymentLocation) ? location : hlsDeploymentLocation
     workspaceName: 'cog-ai-prj-${environmentName}-${uniqueSuffix}'
     instanceType: instanceType
-    includeRadiologyModels: empty(healthcareAgents) ? true : !hasHealthcareAgentNeedingRadiologyModels
+    includeRadiologyModels: false
   }
   dependsOn: [
     m_aihub
@@ -239,6 +268,7 @@ module m_appStorageAccount 'modules/storageAccount.bicep' = {
       }
     ]
     tags: tags
+    subnetId: m_network.outputs.appServiceSubnetId
   }
 }
 
@@ -295,6 +325,7 @@ module m_app 'modules/appservice.bicep' = {
     clinicalNotesSource: clinicalNotesSource
     fhirServiceEndpoint: fhirServiceEndpoint
     fabricUserDataFunctionEndpoint: fabricUserDataFunctionEndpoint
+    appServiceSubnetId: m_network.outputs.appServiceSubnetId
   }
 }
 
@@ -351,3 +382,6 @@ output FABRIC_USER_DATA_FUNCTION_ENDPOINT string = fabricUserDataFunctionEndpoin
 output HLS_MODEL_ENDPOINTS string = string(m_app.outputs.modelEndpoints)
 output KEYVAULT_ENDPOINT string = m_keyVault.outputs.keyVaultEndpoint
 output HEALTHCARE_AGENT_SERVICE_ENDPOINTS array = !empty(healthcareAgents) ? m_healthcareAgentService.outputs.healthcareAgentServiceEndpoints : []
+output VNET_ID string = m_network.outputs.vnetId
+output VNET_NAME string = m_network.outputs.vnetName
+output APP_SERVICE_SUBNET_ID string = m_network.outputs.appServiceSubnetId

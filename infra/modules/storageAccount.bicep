@@ -10,6 +10,9 @@ param location string
 param tags object = {}
 param grantAccessTo array = []
 
+@description('Subnet ID for service endpoints')
+param subnetId string = ''
+
 resource sa 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: storageAccountName
   location: location
@@ -20,9 +23,50 @@ resource sa 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   kind: 'StorageV2'
   properties: {
     allowSharedKeyAccess: false
+    allowBlobPublicAccess: false
+    allowCrossTenantReplication: false
     accessTier: 'Hot'
     minimumTlsVersion: 'TLS1_2'
+    isLocalUserEnabled: false
+    isNfsV3Enabled: false
+    isSftpEnabled: false
+    largeFileSharesState: 'Disabled'
     supportsHttpsTrafficOnly: true
+    defaultToOAuthAuthentication: true
+    publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Deny'
+      virtualNetworkRules: !empty(subnetId) ? [
+        {
+          id: subnetId
+          action: 'Allow'
+        }
+      ] : []
+      bypass: 'AzureServices'
+      ipRules: [
+        {
+          value: '173.76.166.40'
+          action: 'Allow'
+        }
+      ]
+    }
+    encryption: {
+      keySource: 'Microsoft.Storage'
+      services: {
+        blob: {
+          enabled: true
+        }
+        file: {
+          enabled: true
+        }
+        table: {
+          enabled: true
+        }
+        queue: {
+          enabled: true
+        }
+      }
+    }
   }
 }
 

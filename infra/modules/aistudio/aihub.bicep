@@ -42,26 +42,39 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   properties: {
     isLocalUserEnabled: false
     allowSharedKeyAccess: false
+    allowBlobPublicAccess: false
+    allowCrossTenantReplication: false
     accessTier: 'Hot'
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
     encryption: {
       keySource: 'Microsoft.Storage'
       services: {
         blob: {
           enabled: true
-          keyType: 'Account'
         }
         file: {
           enabled: true
-          keyType: 'Account'
+        }
+        table: {
+          enabled: true
+        }
+        queue: {
+          enabled: true
         }
       }
     }
-    minimumTlsVersion: 'TLS1_2'
     networkAcls: {
       bypass: 'AzureServices'
-      defaultAction: 'Allow'
+      defaultAction: 'Deny'
+      ipRules: [
+        {
+          value: '173.76.166.40'
+          action: 'Allow'
+        }
+      ]
     }
-    supportsHttpsTrafficOnly: true
+    publicNetworkAccess: 'Enabled'
   }
 }
 
