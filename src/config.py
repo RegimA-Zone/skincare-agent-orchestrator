@@ -4,7 +4,7 @@
 import json
 import logging
 import os
-
+from azure.monitor.opentelemetry import configure_azure_monitor
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -31,21 +31,33 @@ def load_agent_config(scenario: str) -> dict:
     return agent_config
 
 
-def setup_logging(log_level=logging.INFO) -> None:
-    # Create a logging handler to write logging records, in OTLP format, to the exporter.
+def setup_logging(log_level=logging.DEBUG) -> None:
+    # Set up console logging and ensure logs are propagated to root logger for Azure Monitor
     console_handler = logging.StreamHandler()
+    logger = logging.getLogger(__name__)
+    
+    # Configure Azure Monitor if connection string is set
+    if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        configure_azure_monitor(
+            connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
+            logging_exporter_enabled=True,
+            tracing_exporter_enabled=True,
+            metrics_exporter_enabled=True,
+            enable_live_metrics=True,
+            formatter=logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+        )
 
-    # Add filters to the handler to only process records from semantic_kernel.
-    # console_handler.addFilter(logging.Filter("semantic_kernel"))
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    console_handler.setFormatter(formatter)
 
-    logger = logging.getLogger()
-    logger.addHandler(console_handler)
+    # Avoid duplicate handlers
+    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+        logger.addHandler(console_handler)
     logger.setLevel(log_level)
 
+    # Ensure all loggers propagate to root for Azure Monitor
+    for name in logging.root.manager.loggerDict:
+        logging.getLogger(name).propagate = True
 
 class DefaultConfig:
     """ Bot Configuration """

@@ -1,6 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
+@description('Name of the Application Insights instance. Automatically generated if left blank')
+param appInsightsName string = ''
+// Deploy Application Insights
+module m_appInsights 'modules/appinsights.bicep' = {
+  name: 'deploy_app_insights'
+  params: {
+    appInsightsName: names.appInsights
+    location: location
+    tags: tags
+  }
+}
+
 targetScope = 'resourceGroup'
 // Common configurations
 @description('Name of the environment')
@@ -101,6 +113,7 @@ var names = {
   storage: !empty(storageName) ? storageName : replace(replace('${abbrs.storageStorageAccounts}${environmentName}${uniqueSuffix}', '-', ''), '_', '')
   appStorage: !empty(appStorageName) ? appStorageName : replace(replace('${abbrs.storageStorageAccounts}app${environmentName}${uniqueSuffix}', '-', ''), '_', '')
   keyVault: !empty(keyVaultName) ? keyVaultName : '${abbrs.keyVaultVaults}${environmentName}-${uniqueSuffix}'
+  appInsights: !empty(appInsightsName) ? appInsightsName : '${abbrs.insightsComponents}${environmentName}-${uniqueSuffix}'
   ahdsWorkspaceName: replace('ahds${environmentName}${uniqueSuffix}', '-', '')
   ahdsFhirServiceName: replace('fhir${environmentName}${uniqueSuffix}', '-', '')
 }
@@ -241,7 +254,6 @@ module m_appStorageAccount 'modules/storageAccount.bicep' = {
     tags: tags
   }
 }
-
 var shouldDeployFhirService = clinicalNotesSource == 'fhir' && empty(fhirServiceEndpoint)
 
 module m_fhirService 'modules/fhirService.bicep' = if (shouldDeployFhirService) {
@@ -292,6 +304,9 @@ module m_app 'modules/appservice.bicep' = {
     graphRagSubscriptionKey: graphRagSubscriptionKey
     keyVaultName: m_keyVault.outputs.keyVaultName
     scenario: scenario
+    // Pass Application Insights connection string as environment variable
+    applicationInsightsConnectionString: m_appInsights.outputs.connectionString
+    
     clinicalNotesSource: clinicalNotesSource
     fhirServiceEndpoint: fhirServiceEndpoint
     fabricUserDataFunctionEndpoint: fabricUserDataFunctionEndpoint

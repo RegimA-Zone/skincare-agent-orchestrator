@@ -107,6 +107,10 @@ bot_config = {
     "app_context": app_context,
     "turn_contexts": {}
 }
+# Pass Application Insights connection string to each bot's config
+for agent in app_context.all_agent_configs:
+    agent["appinsights_conn_str"] = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+
 bots = {
     agent["name"]: AssistantBot(agent, **bot_config) if agent["name"] != "magentic"
     else MagenticBot(agent, **bot_config)
