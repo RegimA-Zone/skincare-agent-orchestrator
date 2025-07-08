@@ -5,9 +5,47 @@ import json
 import logging
 import os
 from azure.monitor.opentelemetry import configure_azure_monitor
+
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+def setup_monitor_logging(log_level=logging.DEBUG) -> None:
+    # Set up console logging and ensure logs are propagated to root logger for Azure Monitor
+    from autogen_core import TRACE_LOGGER_NAME
+    autogen_logger = logging.getLogger(TRACE_LOGGER_NAME)
+    autogen_logger.setLevel(log_level)
+    autogen_logger.propagate = True
+
+    logger = logging.getLogger(__name__)
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # Configure Azure Monitor if connection string is set
+    if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        configure_azure_monitor(
+            logger=logging.getLogger(__name__),
+            connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
+            logging_exporter_enabled=True,
+            tracing_exporter_enabled=True,
+            metrics_exporter_enabled=True,
+            enable_live_metrics=True,
+            formatter=formatter
+        )
+
+    # Avoid duplicate handlers
+    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+        logger.addHandler(console_handler)
+    logger.setLevel(log_level)
+
+    # Ensure all loggers propagate to root for Azure Monitor
+    for name in logging.root.manager.loggerDict:
+        logging.getLogger(name).propagate = True
 
 
 def load_agent_config(scenario: str) -> dict:
@@ -30,34 +68,6 @@ def load_agent_config(scenario: str) -> dict:
 
     return agent_config
 
-
-def setup_logging(log_level=logging.DEBUG) -> None:
-    # Set up console logging and ensure logs are propagated to root logger for Azure Monitor
-    console_handler = logging.StreamHandler()
-    logger = logging.getLogger(__name__)
-    
-    # Configure Azure Monitor if connection string is set
-    if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
-        configure_azure_monitor(
-            connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
-            logging_exporter_enabled=True,
-            tracing_exporter_enabled=True,
-            metrics_exporter_enabled=True,
-            enable_live_metrics=True,
-            formatter=logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
-        )
-
-
-    # Avoid duplicate handlers
-    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
-        logger.addHandler(console_handler)
-    logger.setLevel(log_level)
-
-    # Ensure all loggers propagate to root for Azure Monitor
-    for name in logging.root.manager.loggerDict:
-        logging.getLogger(name).propagate = True
 
 class DefaultConfig:
     """ Bot Configuration """

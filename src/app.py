@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 import os
+import logging
 
 from azure.identity import AzureCliCredential, ManagedIdentityCredential
 from azure.storage.blob.aio import BlobServiceClient
@@ -12,10 +13,11 @@ from fastapi.staticfiles import StaticFiles
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.responses import FileResponse
+from semantic_kernel.utils.logging import setup_logging
 
 from bots import AssistantBot, MagenticBot
 from bots.show_typing_middleware import ShowTypingMiddleware
-from config import DefaultConfig, load_agent_config, setup_logging
+from config import DefaultConfig, load_agent_config, setup_monitor_logging
 from data_models.app_context import AppContext
 from data_models.data_access import create_data_access
 from mcp_app import create_fast_mcp_app
@@ -26,8 +28,44 @@ from routes.patient_data.patient_data_routes import patient_data_routes
 from routes.views.patient_data_answer_routes import patient_data_answer_source_routes
 from routes.views.patient_timeline_routes import patient_timeline_entry_source_routes
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
 load_dotenv(".env")
 
+# --- OpenTelemetry Logging & Tracing Setup ---
+
+
+def setup_otel_logging():
+    """Configure OpenTelemetry logging and tracing for Application Insights."""
+    os.environ["OTEL_EXPERIMENTAL_RESOURCE_DETECTORS"] = "azure_app_service"
+    trace.set_tracer_provider(TracerProvider())
+    tracer_provider = trace.get_tracer_provider()
+
+    # Configure Azure Monitor Exporter
+    if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        exporter = AzureMonitorTraceExporter(
+            connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
+        )
+        span_processor = BatchSpanProcessor(exporter)
+        tracer_provider.add_span_processor(span_processor)
+
+    # Instrument FastAPI
+    FastAPIInstrumentor().instrument()
+
+    # Instrument Logging
+    LoggingInstrumentor().instrument(set_logging_format=True)
+
+    # Set root logger level for all logs
+    logging.getLogger().setLevel(logging.DEBUG)
+
+
+setup_otel_logging()
+setup_monitor_logging()
 setup_logging()
 
 
@@ -70,11 +108,12 @@ def create_app(
     app.include_router(patient_data_answer_source_routes(app_context.data_access))
     app.include_router(patient_timeline_entry_source_routes(app_context.data_access))
 
+
     # Serve static files from the React build directory
     static_files_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
     if os.path.exists(static_files_path):
         app.mount("/static", StaticFiles(directory=os.path.join(static_files_path, "static")), name="static")
-        
+
         # Add a route for the root URL to serve index.html
         @app.get("/")
         async def serve_root():
@@ -82,7 +121,7 @@ def create_app(
             if os.path.exists(index_path):
                 return FileResponse(index_path)
             return {"detail": "React app not built yet"}
-        
+
         # Add a catch-all route to serve index.html for client-side routing only triggered if the path falls through to the static files
         @app.get("/{full_path:path}")
         async def serve_react_app(full_path: str):
@@ -107,10 +146,6 @@ bot_config = {
     "app_context": app_context,
     "turn_contexts": {}
 }
-# Pass Application Insights connection string to each bot's config
-for agent in app_context.all_agent_configs:
-    agent["appinsights_conn_str"] = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
-
 bots = {
     agent["name"]: AssistantBot(agent, **bot_config) if agent["name"] != "magentic"
     else MagenticBot(agent, **bot_config)
