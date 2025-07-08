@@ -35,7 +35,7 @@ resource sa 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     defaultToOAuthAuthentication: true
     publicNetworkAccess: 'Enabled'
     networkAcls: {
-      defaultAction: 'Deny'
+      defaultAction: 'Allow'
       virtualNetworkRules: !empty(subnetId) ? [
         {
           id: subnetId
@@ -43,12 +43,7 @@ resource sa 'Microsoft.Storage/storageAccounts@2023-01-01' = {
         }
       ] : []
       bypass: 'AzureServices'
-      ipRules: [
-        {
-          value: '173.76.166.40'
-          action: 'Allow'
-        }
-      ]
+      ipRules: []
     }
     encryption: {
       keySource: 'Microsoft.Storage'

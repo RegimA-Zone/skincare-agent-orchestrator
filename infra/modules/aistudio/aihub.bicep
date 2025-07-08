@@ -66,13 +66,8 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     }
     networkAcls: {
       bypass: 'AzureServices'
-      defaultAction: 'Deny'
-      ipRules: [
-        {
-          value: '173.76.166.40'
-          action: 'Allow'
-        }
-      ]
+      defaultAction: 'Allow'
+      ipRules: []
     }
     publicNetworkAccess: 'Enabled'
   }

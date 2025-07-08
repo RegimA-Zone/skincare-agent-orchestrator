@@ -7,80 +7,32 @@ param location string
 @description('Name of the virtual network')
 param vnetName string
 
-@description('Name of the app service subnet')
-param appServiceSubnetName string
+@description('Virtual network address prefixes')
+param vnetAddressPrefixes array = ['10.0.0.0/16']
 
-@description('Virtual network address prefix')
-param vnetAddressPrefix string = '10.0.0.0/16'
-
-@description('App service subnet address prefix')
-param appServiceSubnetAddressPrefix string = '10.0.1.0/24'
+@description('Subnet configurations for the virtual network')
+param subnets array = [
+  {
+    name: 'appservice-subnet'
+    addressPrefix: '10.0.1.0/24'
+    delegation: 'Microsoft.Web/serverFarms'
+    serviceEndpoints: ['Microsoft.KeyVault', 'Microsoft.Storage', 'Microsoft.Web']
+    securityRules: []
+  }
+]
 
 @description('Tags for network resources')
 param tags object = {}
 
-// Network Security Group for App Service subnet
-resource appServiceNsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
-  name: '${appServiceSubnetName}-nsg'
+// Network Security Groups for subnets
+resource nsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = [for subnet in subnets: {
+  name: '${subnet.name}-nsg'
   location: location
   tags: tags
   properties: {
-    securityRules: [
-      {
-        name: 'AllowHTTPSInbound'
-        properties: {
-          protocol: 'Tcp'
-          sourcePortRange: '*'
-          destinationPortRange: '443'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-          access: 'Allow'
-          priority: 1000
-          direction: 'Inbound'
-        }
-      }
-      {
-        name: 'AllowHTTPInbound'
-        properties: {
-          protocol: 'Tcp'
-          sourcePortRange: '*'
-          destinationPortRange: '80'
-          sourceAddressPrefix: '*'
-          destinationAddressPrefix: '*'
-          access: 'Allow'
-          priority: 1010
-          direction: 'Inbound'
-        }
-      }
-      {
-        name: 'AllowAzureServicesOutbound'
-        properties: {
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: 'VirtualNetwork'
-          destinationAddressPrefix: 'AzureCloud'
-          access: 'Allow'
-          priority: 1000
-          direction: 'Outbound'
-        }
-      }
-      {
-        name: 'AllowInternetOutbound'
-        properties: {
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: 'VirtualNetwork'
-          destinationAddressPrefix: 'Internet'
-          access: 'Allow'
-          priority: 1010
-          direction: 'Outbound'
-        }
-      }
-    ]
+    securityRules: subnet.securityRules
   }
-}
+}]
 
 // Virtual Network
 resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
@@ -89,55 +41,40 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
   tags: tags
   properties: {
     addressSpace: {
-      addressPrefixes: [
-        vnetAddressPrefix
-      ]
+      addressPrefixes: vnetAddressPrefixes
     }
   }
 }
 
-// App Service Subnet
-resource appServiceSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' = {
+// Subnets
+resource subnet 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' = [for (subnet, i) in subnets: {
   parent: vnet
-  name: appServiceSubnetName
+  name: subnet.name
   properties: {
-    addressPrefix: appServiceSubnetAddressPrefix
+    addressPrefix: subnet.addressPrefix
     networkSecurityGroup: {
-      id: appServiceNsg.id
+      id: nsg[i].id
     }
-    delegations: [
+    delegations: subnet.delegation != '' ? [
       {
-        name: 'Microsoft.Web.serverFarms'
+        name: subnet.delegation
         properties: {
-          serviceName: 'Microsoft.Web/serverFarms'
+          serviceName: subnet.delegation
         }
       }
-    ]
-    serviceEndpoints: [
-      {
-        service: 'Microsoft.KeyVault'
-        locations: [
-          location
-        ]
-      }
-      {
-        service: 'Microsoft.Storage'
-        locations: [
-          location
-        ]
-      }
-      {
-        service: 'Microsoft.Web'
-        locations: [
-          location
-        ]
-      }
-    ]
+    ] : []
+    serviceEndpoints: [for endpoint in subnet.serviceEndpoints: {
+      service: endpoint
+      locations: [
+        location
+      ]
+    }]
   }
-}
+}]
 
 output vnetId string = vnet.id
 output vnetName string = vnet.name
-output appServiceSubnetId string = appServiceSubnet.id
-output appServiceSubnetName string = appServiceSubnetName
-output nsgId string = appServiceNsg.id
+output subnetIds array = [for i in range(0, length(subnets)): subnet[i].id]
+output subnetNames array = [for subnet in subnets: subnet.name]
+output appServiceSubnetId string = subnet[0].id // First subnet is assumed to be app service subnet
+output nsgIds array = [for i in range(0, length(subnets)): nsg[i].id]

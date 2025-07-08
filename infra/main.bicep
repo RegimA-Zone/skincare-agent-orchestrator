@@ -88,12 +88,71 @@ param fabricUserDataFunctionEndpoint string = ''
 // Network configurations
 @description('Name of the Virtual Network. Automatically generated if left blank')
 param vnetName string = ''
-@description('Name of the App Service subnet. Automatically generated if left blank')
-param appServiceSubnetName string = ''
-@description('Virtual network address prefix')
-param vnetAddressPrefix string = '10.0.0.0/16'
-@description('App service subnet address prefix')
-param appServiceSubnetAddressPrefix string = '10.0.1.0/24'
+@description('Virtual network address prefixes')
+param vnetAddressPrefixes array = ['10.0.0.0/16']
+@description('Subnet configurations for the virtual network')
+param subnets array = [
+  {
+    name: 'appservice-subnet'
+    addressPrefix: '10.0.1.0/24'
+    delegation: 'Microsoft.Web/serverFarms'
+    serviceEndpoints: ['Microsoft.KeyVault', 'Microsoft.Storage', 'Microsoft.Web']
+    securityRules: [
+      {
+        name: 'AllowHTTPSInbound'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+          access: 'Allow'
+          priority: 1000
+          direction: 'Inbound'
+        }
+      }
+      {
+        name: 'AllowHTTPInbound'
+        properties: {
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '80'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+          access: 'Allow'
+          priority: 1010
+          direction: 'Inbound'
+        }
+      }
+      {
+        name: 'AllowAzureServicesOutbound'
+        properties: {
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'AzureCloud'
+          access: 'Allow'
+          priority: 1000
+          direction: 'Outbound'
+        }
+      }
+      {
+        name: 'AllowInternetOutbound'
+        properties: {
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          destinationAddressPrefix: 'Internet'
+          access: 'Allow'
+          priority: 1010
+          direction: 'Outbound'
+        }
+      }
+    ]
+  }
+]
 @description('Location to deploy network resources')
 param networkLocation string = resourceGroup().location
 
@@ -116,7 +175,6 @@ var names = {
   ahdsWorkspaceName: replace('ahds${environmentName}${uniqueSuffix}', '-', '')
   ahdsFhirServiceName: replace('fhir${environmentName}${uniqueSuffix}', '-', '')
   vnet: !empty(vnetName) ? vnetName : '${abbrs.networkVirtualNetworks}${environmentName}-${uniqueSuffix}'
-  appServiceSubnet: !empty(appServiceSubnetName) ? appServiceSubnetName : 'appservice-subnet'
 }
 
 var agentConfigs = {
@@ -129,6 +187,8 @@ var allAgents = agentConfigs[scenario]
 var agents = allAgents
 
 var healthcareAgents = filter(allAgents, agent => contains(agent, 'healthcare_agent'))
+var hasHealthcareAgentNeedingRadiologyModels = contains(map(healthcareAgents, agent => toLower(agent.name)), 'radiology')
+
 
 module m_appServicePlan 'modules/appserviceplan.bicep' = {
   name: 'deploy_app_service_plan'
@@ -145,9 +205,8 @@ module m_network 'modules/network.bicep' = {
   params: {
     location: empty(networkLocation) ? location : networkLocation
     vnetName: names.vnet
-    appServiceSubnetName: names.appServiceSubnet
-    vnetAddressPrefix: vnetAddressPrefix
-    appServiceSubnetAddressPrefix: appServiceSubnetAddressPrefix
+    vnetAddressPrefixes: vnetAddressPrefixes
+    subnets: subnets
     tags: tags
   }
 }
@@ -226,7 +285,6 @@ module m_aihub 'modules/aistudio/aihub.bicep' = {
   }
 }
 
-//includeRadiologyModels: empty(healthcareAgents) ? true : !hasHealthcareAgentNeedingRadiologyModels
 
 module hlsModels 'modules/hlsModel.bicep' = {
   name: 'deploy_hls_models'
@@ -234,7 +292,8 @@ module hlsModels 'modules/hlsModel.bicep' = {
     location: empty(hlsDeploymentLocation) ? location : hlsDeploymentLocation
     workspaceName: 'cog-ai-prj-${environmentName}-${uniqueSuffix}'
     instanceType: instanceType
-    includeRadiologyModels: false
+    includeRadiologyModels: empty(healthcareAgents) ? true : !hasHealthcareAgentNeedingRadiologyModels
+
   }
   dependsOn: [
     m_aihub
