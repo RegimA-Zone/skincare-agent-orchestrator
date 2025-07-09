@@ -13,11 +13,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.responses import FileResponse
-from semantic_kernel.utils.logging import setup_logging
 
 from bots import AssistantBot, MagenticBot
 from bots.show_typing_middleware import ShowTypingMiddleware
-from config import DefaultConfig, load_agent_config, setup_monitor_logging
+from config import DefaultConfig, load_agent_config, setup_auto_logging
 from data_models.app_context import AppContext
 from data_models.data_access import create_data_access
 from mcp_app import create_fast_mcp_app
@@ -28,45 +27,12 @@ from routes.patient_data.patient_data_routes import patient_data_routes
 from routes.views.patient_data_answer_routes import patient_data_answer_source_routes
 from routes.views.patient_timeline_routes import patient_timeline_entry_source_routes
 
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
-
 load_dotenv(".env")
 
 # --- OpenTelemetry Logging & Tracing Setup ---
 
 
-def setup_otel_logging():
-    """Configure OpenTelemetry logging and tracing for Application Insights."""
-    os.environ["OTEL_EXPERIMENTAL_RESOURCE_DETECTORS"] = "azure_app_service"
-    trace.set_tracer_provider(TracerProvider())
-    tracer_provider = trace.get_tracer_provider()
-
-    # Configure Azure Monitor Exporter
-    if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
-        exporter = AzureMonitorTraceExporter(
-            connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
-        )
-        span_processor = BatchSpanProcessor(exporter)
-        tracer_provider.add_span_processor(span_processor)
-
-    # Instrument FastAPI
-    FastAPIInstrumentor().instrument()
-
-    # Instrument Logging
-    LoggingInstrumentor().instrument(set_logging_format=True)
-
-    # Set root logger level for all logs
-    logging.getLogger().setLevel(logging.DEBUG)
-
-
-setup_otel_logging()
-setup_monitor_logging()
-setup_logging()
+setup_auto_logging()
 
 
 def create_app_context():

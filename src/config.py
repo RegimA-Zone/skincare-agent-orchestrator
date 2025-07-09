@@ -4,19 +4,51 @@
 import json
 import logging
 import os
+from semantic_kernel.utils.logging import setup_logging
 from azure.monitor.opentelemetry import configure_azure_monitor
-
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 import yaml
 
 logger = logging.getLogger(__name__)
 
+def setup_otel_logging():
+    """Configure OpenTelemetry logging and tracing for Application Insights."""
+    os.environ["OTEL_EXPERIMENTAL_RESOURCE_DETECTORS"] = "azure_app_service"
+    trace.set_tracer_provider(TracerProvider())
+    tracer_provider = trace.get_tracer_provider()
 
-def setup_monitor_logging(log_level=logging.DEBUG) -> None:
-    # Set up console logging and ensure logs are propagated to root logger for Azure Monitor
+    # Configure Azure Monitor Exporter
+    if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        exporter = AzureMonitorTraceExporter(
+            connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
+        )
+        span_processor = BatchSpanProcessor(exporter)
+        tracer_provider.add_span_processor(span_processor)
+
+    # Instrument FastAPI
+    FastAPIInstrumentor().instrument()
+
+    # Instrument Logging
+    LoggingInstrumentor().instrument(set_logging_format=True)
+
+    # Set root logger level for all logs
+    logging.getLogger().setLevel(logging.DEBUG)
+
+def setup_auto_logging(log_level=logging.DEBUG) -> None:
+    # Set up autogen logging and ensure logs are propagated to root logger for Azure Monitor
     from autogen_core import TRACE_LOGGER_NAME
     autogen_logger = logging.getLogger(TRACE_LOGGER_NAME)
     autogen_logger.setLevel(log_level)
     autogen_logger.propagate = True
+    #setup semantic kernel logging
+    setup_logging()
+    #setup logging for opentelemetry
+    setup_otel_logging()
 
     logger = logging.getLogger(__name__)
     formatter = logging.Formatter(
