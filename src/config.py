@@ -4,7 +4,6 @@
 import json
 import logging
 import os
-from semantic_kernel.utils.logging import setup_logging
 from azure.monitor.opentelemetry import configure_azure_monitor
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -39,14 +38,17 @@ def setup_otel_logging():
     # Set root logger level for all logs
     logging.getLogger().setLevel(logging.DEBUG)
 
-def setup_auto_logging(log_level=logging.DEBUG) -> None:
+def setup_logging(log_level=logging.DEBUG) -> None:
     # Set up autogen logging and ensure logs are propagated to root logger for Azure Monitor
     from autogen_core import TRACE_LOGGER_NAME
     autogen_logger = logging.getLogger(TRACE_LOGGER_NAME)
     autogen_logger.setLevel(log_level)
     autogen_logger.propagate = True
+    
     #setup semantic kernel logging
+    from semantic_kernel.utils.logging import setup_logging
     setup_logging()
+    
     #setup logging for opentelemetry
     setup_otel_logging()
 

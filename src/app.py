@@ -16,7 +16,7 @@ from starlette.responses import FileResponse
 
 from bots import AssistantBot, MagenticBot
 from bots.show_typing_middleware import ShowTypingMiddleware
-from config import DefaultConfig, load_agent_config, setup_auto_logging
+from config import DefaultConfig, load_agent_config, setup_logging
 from data_models.app_context import AppContext
 from data_models.data_access import create_data_access
 from mcp_app import create_fast_mcp_app
@@ -32,7 +32,7 @@ load_dotenv(".env")
 # --- OpenTelemetry Logging & Tracing Setup ---
 
 
-setup_auto_logging()
+setup_logging()
 
 
 def create_app_context():
