@@ -1,18 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-@description('Name of the Application Insights instance. Automatically generated if left blank')
-param appInsightsName string = ''
-// Deploy Application Insights
-module m_appInsights 'modules/appinsights.bicep' = {
-  name: 'deploy_app_insights'
-  params: {
-    appInsightsName: names.appInsights
-    location: location
-    tags: tags
-  }
-}
-
 targetScope = 'resourceGroup'
 // Common configurations
 @description('Name of the environment')
@@ -96,6 +84,9 @@ param clinicalNotesSource string = 'blob'
 param fhirServiceEndpoint string = ''
 @description('The Microsoft Fabric User Data Function Endpoint.')
 param fabricUserDataFunctionEndpoint string = ''
+
+@description('Name of the Application Insights instance. Automatically generated if left blank')
+param appInsightsName string = ''
 
 var modelName = split(model, ';')[0]
 var modelVersion = split(model, ';')[1]
@@ -342,6 +333,22 @@ module m_healthcareAgentService 'modules/healthcareAgentService.bicep' = if (!em
       }
     ]
     keyVaultName: m_keyVault.outputs.keyVaultName
+  }
+}
+
+// Deploy Application Insights
+module m_appInsights 'modules/appinsights.bicep' = {
+  name: 'deploy_app_insights'
+  params: {
+    appInsightsName: names.appInsights
+    location: location
+    tags: tags
+    grantAccessTo: [
+      for i in range(0, length(agents)): {
+        id: m_msi[i].outputs.msiPrincipalID
+        type: 'ServicePrincipal'
+      }
+    ]
   }
 }
 

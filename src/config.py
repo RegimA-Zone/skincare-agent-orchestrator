@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+from azure.identity import ManagedIdentityCredential
 from azure.monitor.opentelemetry import configure_azure_monitor
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -62,7 +63,9 @@ def setup_logging(log_level=logging.DEBUG) -> None:
 
     # Configure Azure Monitor if connection string is set
     if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+        credential = ManagedIdentityCredential(client_id=os.getenv("AZURE_CLIENT_ID"))
         configure_azure_monitor(
+            credential=credential,
             logger=logging.getLogger(__name__),
             connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
             logging_exporter_enabled=True,
