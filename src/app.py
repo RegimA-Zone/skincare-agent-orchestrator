@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 
 import os
-import logging
 
 from azure.identity import AzureCliCredential, ManagedIdentityCredential
 from azure.storage.blob.aio import BlobServiceClient
@@ -28,9 +27,6 @@ from routes.views.patient_data_answer_routes import patient_data_answer_source_r
 from routes.views.patient_timeline_routes import patient_timeline_entry_source_routes
 
 load_dotenv(".env")
-
-# --- OpenTelemetry Logging & Tracing Setup ---
-
 
 setup_logging()
 
@@ -74,24 +70,28 @@ def create_app(
     app.include_router(patient_data_answer_source_routes(app_context.data_access))
     app.include_router(patient_timeline_entry_source_routes(app_context.data_access))
 
-
     # Serve static files from the React build directory
     static_files_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
     if os.path.exists(static_files_path):
         app.mount("/static", StaticFiles(directory=os.path.join(static_files_path, "static")), name="static")
-
+        
+        # Mount assets directory for Vite-generated assets like /assets/index-abc123.js
+        assets_path = os.path.join(static_files_path, "static", "assets")
+        if os.path.exists(assets_path):
+            app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+        
         # Add a route for the root URL to serve index.html
         @app.get("/")
         async def serve_root():
-            index_path = os.path.join(static_files_path, "index.html")
+            index_path = os.path.join(static_files_path, "static", "index.html")
             if os.path.exists(index_path):
                 return FileResponse(index_path)
             return {"detail": "React app not built yet"}
-
-        # Add a catch-all route to serve index.html for client-side routing only triggered if the path falls through to the static files
+        
+        # Add a catch-all route to serve index.html for client-side routing
         @app.get("/{full_path:path}")
         async def serve_react_app(full_path: str):
-            index_path = os.path.join(static_files_path, "index.html")
+            index_path = os.path.join(static_files_path, "static", "index.html")
             if os.path.exists(index_path):
                 return FileResponse(index_path)
             return {"detail": "React app not built yet"}
