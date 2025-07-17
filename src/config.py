@@ -4,7 +4,6 @@
 import json
 import logging
 import os
-from azure.identity import ManagedIdentityCredential
 from azure.monitor.opentelemetry import configure_azure_monitor
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -15,8 +14,12 @@ from opentelemetry.instrumentation.logging import LoggingInstrumentor
 import yaml
 
 logger = logging.getLogger(__name__)
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
-def setup_otel_logging():
+
+def setup_app_insights_logging(credential, log_level=logging.DEBUG) -> None:
     """Configure OpenTelemetry logging and tracing for Application Insights."""
     os.environ["OTEL_EXPERIMENTAL_RESOURCE_DETECTORS"] = "azure_app_service"
     trace.set_tracer_provider(TracerProvider())
@@ -30,40 +33,25 @@ def setup_otel_logging():
         span_processor = BatchSpanProcessor(exporter)
         tracer_provider.add_span_processor(span_processor)
 
+    # Set up autogen logging and ensure logs are propagated to root logger for Azure Monitor
+    from autogen_core import TRACE_LOGGER_NAME
+    autogen_logger = logging.getLogger(TRACE_LOGGER_NAME)
+    autogen_logger.setLevel(log_level)
+    autogen_logger.propagate = True
+
+    # setup semantic kernel logging
+    from semantic_kernel.utils.logging import setup_logging
+    setup_logging()
+
     # Instrument FastAPI
     FastAPIInstrumentor().instrument()
 
     # Instrument Logging
     LoggingInstrumentor().instrument(set_logging_format=True)
 
-    # Set root logger level for all logs
-    logging.getLogger().setLevel(logging.DEBUG)
-
-def setup_logging(log_level=logging.DEBUG) -> None:
-    # Set up autogen logging and ensure logs are propagated to root logger for Azure Monitor
-    from autogen_core import TRACE_LOGGER_NAME
-    autogen_logger = logging.getLogger(TRACE_LOGGER_NAME)
-    autogen_logger.setLevel(log_level)
-    autogen_logger.propagate = True
-    
-    #setup semantic kernel logging
-    from semantic_kernel.utils.logging import setup_logging
-    setup_logging()
-    
-    #setup logging for opentelemetry
-    setup_otel_logging()
-
-    logger = logging.getLogger(__name__)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
     # Configure Azure Monitor if connection string is set
     if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
-        credential = ManagedIdentityCredential(client_id=os.getenv("AZURE_CLIENT_ID"))
+        credential = credential
         configure_azure_monitor(
             credential=credential,
             logger=logging.getLogger(__name__),
@@ -76,6 +64,7 @@ def setup_logging(log_level=logging.DEBUG) -> None:
         )
 
     # Avoid duplicate handlers
+    console_handler = logging.StreamHandler()
     if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
         logger.addHandler(console_handler)
     logger.setLevel(log_level)
@@ -83,6 +72,19 @@ def setup_logging(log_level=logging.DEBUG) -> None:
     # Ensure all loggers propagate to root for Azure Monitor
     for name in logging.root.manager.loggerDict:
         logging.getLogger(name).propagate = True
+
+
+def setup_logging(log_level=logging.DEBUG) -> None:
+    # Create a logging handler to write logging records, in OTLP format, to the exporter.
+    console_handler = logging.StreamHandler()
+
+    # Add filters to the handler to only process records from semantic_kernel.
+    # console_handler.addFilter(logging.Filter("semantic_kernel"))
+    console_handler.setFormatter(formatter)
+
+    logger = logging.getLogger()
+    logger.addHandler(console_handler)
+    logger.setLevel(log_level)
 
 
 def load_agent_config(scenario: str) -> dict:

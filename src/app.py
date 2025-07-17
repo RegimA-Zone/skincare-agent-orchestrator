@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 import os
-
+import logging
 from azure.identity import AzureCliCredential, ManagedIdentityCredential
 from azure.storage.blob.aio import BlobServiceClient
 from botbuilder.integration.aiohttp import CloudAdapter, ConfigurationBotFrameworkAuthentication
@@ -15,7 +15,7 @@ from starlette.responses import FileResponse
 
 from bots import AssistantBot, MagenticBot
 from bots.show_typing_middleware import ShowTypingMiddleware
-from config import DefaultConfig, load_agent_config, setup_logging
+from config import DefaultConfig, load_agent_config, setup_logging, setup_app_insights_logging
 from data_models.app_context import AppContext
 from data_models.data_access import create_data_access
 from mcp_app import create_fast_mcp_app
@@ -27,8 +27,6 @@ from routes.views.patient_data_answer_routes import patient_data_answer_source_r
 from routes.views.patient_timeline_routes import patient_timeline_entry_source_routes
 
 load_dotenv(".env")
-
-setup_logging()
 
 
 def create_app_context():
@@ -56,6 +54,17 @@ def create_app_context():
         credential=credential,
         data_access=data_access,
     )
+
+# Setup minimum log level severity for your environment that you want to consume
+log_level = logging.DEBUG
+
+# Setup Application Insights logging
+credential = create_app_context().credential
+setup_app_insights_logging(credential=credential,
+                           log_level=log_level)
+
+# Setup default logging
+setup_logging(log_level=log_level)
 
 
 def create_app(
