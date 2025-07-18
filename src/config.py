@@ -33,16 +33,6 @@ def setup_app_insights_logging(credential, log_level=logging.DEBUG) -> None:
         span_processor = BatchSpanProcessor(exporter)
         tracer_provider.add_span_processor(span_processor)
 
-    # Set up autogen logging and ensure logs are propagated to root logger for Azure Monitor
-    from autogen_core import TRACE_LOGGER_NAME
-    autogen_logger = logging.getLogger(TRACE_LOGGER_NAME)
-    autogen_logger.setLevel(log_level)
-    autogen_logger.propagate = True
-
-    # setup semantic kernel logging
-    from semantic_kernel.utils.logging import setup_logging
-    setup_logging()
-
     # Instrument FastAPI
     FastAPIInstrumentor().instrument()
 
@@ -62,12 +52,6 @@ def setup_app_insights_logging(credential, log_level=logging.DEBUG) -> None:
             enable_live_metrics=True,
             formatter=formatter
         )
-
-    # Avoid duplicate handlers
-    console_handler = logging.StreamHandler()
-    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
-        logger.addHandler(console_handler)
-    logger.setLevel(log_level)
 
     # Ensure all loggers propagate to root for Azure Monitor
     for name in logging.root.manager.loggerDict:
