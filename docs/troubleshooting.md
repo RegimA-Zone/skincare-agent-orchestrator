@@ -100,7 +100,7 @@ Install-Module az.accounts
 
 If you encounter a `InUseSubnetCannotBeDeleted` error when updating IP restrictions with `azd up`, you have two options:
 1. Delete and recreate the affected resources
-2. Use Azure CLI to directly update IP restrictions without redeployment (recommended):
+2. Use Azure CLI to directly update IP restrictions without redeployment:
 
 ```bash
 # Add an IP restriction
