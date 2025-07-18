@@ -28,6 +28,9 @@ from routes.views.patient_timeline_routes import patient_timeline_entry_source_r
 
 load_dotenv(".env")
 
+# Setup default logging and minimum log level severity for your environment that you want to consume
+log_level = logging.INFO
+setup_logging(log_level=log_level)
 
 def create_app_context():
     '''Create the application context for commonly used object used in application.'''
@@ -99,15 +102,9 @@ def create_app(
 
 app_context = create_app_context()
 
-# Setup minimum log level severity for your environment that you want to consume
-log_level = logging.DEBUG
-
 # Setup Application Insights logging
 setup_app_insights_logging(credential=app_context.credential,
                            log_level=log_level)
-
-# Setup default logging
-setup_logging(log_level=log_level)
 
 # Create Teams specific objects
 adapters = {
