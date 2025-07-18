@@ -93,21 +93,3 @@ You may need to install the module first with the following command
 ```powershell
 Install-Module az.accounts
 ```
-
-## Networking
-
-### Updating App Service IP Restrictions
-
-If you encounter a `InUseSubnetCannotBeDeleted` error when updating IP restrictions with `azd up`, you have two options:
-1. Delete and recreate the affected resources
-2. Use Azure CLI to directly update IP restrictions without redeployment:
-
-```bash
-# Add an IP restriction
-az webapp config access-restriction add --resource-group <your-resource-group> --name <app-name> \
-  --rule-name "AllowMyIP" --action Allow --ip-address "<your-ip>/32" --priority 200
-
-# Remove an IP restriction
-az webapp config access-restriction remove --resource-group <your-resource-group> --name <app-name> \
-  --rule-name "AllowMyIP"
-```
