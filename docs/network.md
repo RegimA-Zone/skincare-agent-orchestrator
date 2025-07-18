@@ -37,6 +37,9 @@ azd env set ADDITIONAL_ALLOWED_IPS ""
 azd up
 ```
 
+> [!NOTE]
+> If you encounter any issues during redeployment, refer to the [Troubleshooting Guide](troubleshooting.md) for common issues and alternative approaches.
+
 ### Microsoft 365/Teams Integration Considerations
 
 - **IP Restriction Limitations**: The current IP-based approach covers core Teams/M365 services but has limitations with FQDN-dependent services (like `*.teams.microsoft.com`, `login.microsoft.com`). For full functionality, consider Azure Firewall with FQDN rules or the enhanced private architecture with Application Gateway.
