@@ -103,7 +103,7 @@ param vnetName string = ''
 @description('Virtual network address prefixes')
 param vnetAddressPrefixes array = ['10.0.0.0/16']
 @description('Location for service endpoints')
-param serviceEndpointLocation string = resourceGroup().location
+param serviceEndpointLocation string = '*'
 @description('Subnet configurations for the virtual network')
 param subnets array = [
   {
@@ -310,8 +310,7 @@ module hlsModels 'modules/hlsModel.bicep' = if (!hasHlsModelEndpoints) {
     location: empty(hlsDeploymentLocation) ? location : hlsDeploymentLocation
     workspaceName: 'cog-ai-prj-${environmentName}-${uniqueSuffix}'
     instanceType: instanceType
-    // includeRadiologyModels: empty(healthcareAgents) ? true : !hasHealthcareAgentNeedingRadiologyModels
-    includeRadiologyModels: false
+    includeRadiologyModels: empty(healthcareAgents) ? true : !hasHealthcareAgentNeedingRadiologyModels
   }
   dependsOn: [
     m_aihub

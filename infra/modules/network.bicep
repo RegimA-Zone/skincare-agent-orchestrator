@@ -11,15 +11,7 @@ param vnetName string
 param vnetAddressPrefixes array = ['10.0.0.0/16']
 
 @description('Subnet configurations for the virtual network')
-param subnets array = [
-  {
-    name: 'appservice-subnet'
-    addressPrefix: '10.0.1.0/24'
-    delegation: 'Microsoft.Web/serverFarms'
-    serviceEndpoints: ['Microsoft.KeyVault', 'Microsoft.Storage', 'Microsoft.Web']
-    securityRules: []
-  }
-]
+param subnets array
 
 @description('Tags for network resources')
 param tags object = {}
