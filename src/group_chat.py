@@ -28,6 +28,7 @@ from data_models.plugin_configuration import PluginConfiguration
 from healthcare_agents import HealthcareAgent
 from healthcare_agents import config as healthcare_agent_config
 
+
 DEFAULT_MODEL_TEMP = 0
 DEFAULT_TOOL_TYPE = "function"
 
@@ -169,30 +170,38 @@ def create_group_chat(
     termination_function = KernelFunctionFromPrompt(
         function_name="termination",
         prompt=f"""
-        Determine if the conversation should end based on the most recent message.
-        You only have access to the last message in the conversation.
+        Determine if the conversation should end based on the most recent message only.
+        IMPORTANT: In the History, any leading "*AgentName*:" indicates the SPEAKER of the message, not the addressee.
 
-        Reply by giving your full reasoning, and the verdict. The verdict should be either "yes" or "no".
+        Reply with your full reasoning and a verdict that is exactly "yes" or "no".
 
-        You are part of a group chat with several AI agents and a user. 
-        The agents are names are: 
+        You are part of a group chat with several AI agents and a user.
+        The agent names are:
             {",".join([f"{agent['name']}" for agent in all_agents_config])}
 
-        If the most recent message is a question addressed to the user, return "yes".
-        If the question is addressed to "we" or "us", return "yes". For example, if the question is "Should we proceed?", return "yes".
-        If the question is addressed to another agent, return "no".
-        If it is a statement addressed to another agent, return "no".
-        Commands addressed to a specific agent should result in 'no' if there is clear identification of the agent.
-        Commands addressed to "you" or "User" should result in 'yes'.
-        If you are not certain, return "yes".
+        Return "yes" when the last message:
+        - asks the user a question (ends with "?" or uses "you"/"User"), OR
+        - invites the user to respond (e.g., "let us know", "how can we assist/help", "feel free to ask",
+            "what would you like", "should we", "can we", "would you like me to", "do you want me to"), OR
+        - addresses "we/us" as a decision/query to the user.
+
+        Return "no" when the last message:
+        - is a command or question to a specific agent by name, OR
+        - is a statement addressed to another agent.
+
+        Commands addressed to "you" or "User" => "yes".
+        If you are uncertain, return "yes".
+        Ignore any debug/metadata like "PC_CTX" or JSON blobs when deciding.
 
         EXAMPLES:
-            - "User, can you confirm the correct patient ID?" => "yes"
-            - "*ReportCreation*: Please compile the patient timeline. Let's proceed with *ReportCreation*." => "no" (ReportCreation is an agent)
-            - "*ReportCreation*, please proceed ..." => "no" (ReportCreation is an agent)
-            - "If you have any further questions or need assistance, feel free to ask." => "yes"
-            - "Let's proceed with Radiology." => "no" (Radiology is an agent)
-            - "*PatientStatus*, please use ..." => "no" (PatientStatus is an agent)
+        - "User, can you confirm the correct patient ID?" => "yes"
+        - "*ReportCreation*: Please compile the patient timeline. Let's proceed with *ReportCreation*." => "no" (ReportCreation is an agent)
+        - "*ReportCreation*, please proceed ..." => "no" (ReportCreation is an agent)
+        - "If you have any further questions or need assistance, feel free to ask." => "yes"
+        - "Let's proceed with Radiology." => "no" (Radiology is an agent)
+        - "*PatientStatus*, please use ..." => "no" (PatientStatus is an agent)
+        - "*Orchestrator*: Patient context is set to \"patient_4\". Please let us know how we can assist you with this patient today." => "yes"
+
         History:
         {{{{$history}}}}
         """,
@@ -208,6 +217,11 @@ def create_group_chat(
     def evaluate_selection(result):
         logger.info(f"Selection function result: {result}")
         rule = ChatRule.model_validate_json(str(result.value[0]))
+        # Record next agent hint
+        try:
+            _set_pc_ctx_agent_field("next", rule.verdict)
+        except Exception as e:
+            logger.info(f"Failed to set next agent in PC_CTX: {e}")
         return rule.verdict if rule.verdict in [agent["name"] for agent in all_agents_config] else facilitator
 
     chat = AgentGroupChat(
@@ -230,7 +244,7 @@ def create_group_chat(
             result_parser=evaluate_termination,
             agent_variable_name="agents",
             history_variable_name="history",
-            maximum_iterations=30,
+            maximum_iterations=8,
             # Termination only looks at the last message
             history_reducer=ChatHistoryTruncationReducer(
                 target_count=1, auto_reduce=True

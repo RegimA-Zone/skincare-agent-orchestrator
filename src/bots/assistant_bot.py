@@ -2,8 +2,10 @@
 # Licensed under the MIT License.
 
 import asyncio
+import json
 import logging
 import os
+import json
 
 from botbuilder.core import MessageFactory, TurnContext
 from botbuilder.core.teams import TeamsActivityHandler
@@ -11,10 +13,17 @@ from botbuilder.integration.aiohttp import CloudAdapter
 from botbuilder.schema import Activity, ActivityTypes
 from semantic_kernel.agents import AgentGroupChat
 
+
+from semantic_kernel.contents import AuthorRole
+from services.patient_context_service import PATIENT_CONTEXT_PREFIX
+
 from data_models.app_context import AppContext
 from data_models.chat_context import ChatContext
 from errors import NotAuthorizedError
 from group_chat import create_group_chat
+from services.patient_context_service import PatientContextService
+from services.patient_context_analyzer import PatientContextAnalyzer
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +41,12 @@ class AssistantBot(TeamsActivityHandler):
         self.name = agent["name"]
         self.turn_contexts = turn_contexts
         self.adapters = adapters
-        self.adapters[self.name].on_turn_error = self.on_error  # add error handling
+        self.adapters[self.name].on_turn_error = self.on_error
         self.data_access = app_context.data_access
         self.root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        analyzer = PatientContextAnalyzer(token_provider=app_context.cognitive_services_token_provider)
+        self.patient_context_service = PatientContextService(analyzer=analyzer)
 
     async def get_bot_context(
         self, conversation_id: str, bot_name: str, turn_context: TurnContext
@@ -89,20 +101,40 @@ class AssistantBot(TeamsActivityHandler):
         chat_context_accessor = self.data_access.chat_context_accessor
         chat_artifact_accessor = self.data_access.chat_artifact_accessor
 
-        # Load chat context
         chat_ctx = await chat_context_accessor.read(conversation_id)
 
-        # Delete thread if user asks
-        if turn_context.activity.text.endswith("clear"):
-            # Add clear message to chat history
-            chat_ctx.chat_history.add_user_message(turn_context.activity.text.strip())
+        # Extract raw user text (without bot mention) once
+        raw_user_text = turn_context.remove_recipient_mention(turn_context.activity).strip()
+
+        # Full conversation clear (existing behavior)
+        if raw_user_text.endswith("clear"):
+            chat_ctx.chat_history.add_user_message(raw_user_text)
             await chat_context_accessor.archive(chat_ctx)
             await chat_artifact_accessor.archive(conversation_id)
             await turn_context.send_activity("Conversation cleared!")
             return
+
+        # Decide & apply patient context BEFORE building group chat
+        # decision = await self.patient_context_service.decide_and_apply(raw_user_text, chat_ctx)
+        # Decide & apply patient context BEFORE building group chat
+        # Decide & apply patient context BEFORE building group chat
+        logger.info(f"🤖 BOT CONTEXT START - About to call patient context service")
+        logger.info(f"🤖 BOT CONTEXT - Conversation: {conversation_id} | Input: '{raw_user_text}'")
+        logger.info(f"🤖 BOT CONTEXT - Current patient before service: {getattr(chat_ctx, 'patient_id', None)}")
+        logger.info(
+            f"🤖 BOT CONTEXT - Known patients before service: {list(getattr(chat_ctx, 'patient_contexts', {}).keys())}")
+
+        decision, timing = await self.patient_context_service.decide_and_apply(raw_user_text, chat_ctx)
+
+        logger.info(f"🤖 BOT CONTEXT COMPLETE - Decision: {decision} | Timing: {timing}")
+        logger.info(f"🤖 BOT CONTEXT - Current patient after service: {getattr(chat_ctx, 'patient_id', None)}")
+        logger.info(
+            f"🤖 BOT CONTEXT - Known patients after service: {list(getattr(chat_ctx, 'patient_contexts', {}).keys())}")
+        logger.info(f"🤖 BOT CONTEXT - Total chat messages: {len(chat_ctx.chat_history.messages)}")
+        logger.info(f"Patient context decision: {decision} | Input: '{raw_user_text}' | Timing: {timing}")
+
         agents = self.all_agents
         if len(chat_ctx.chat_history.messages) == 0:
-            # new conversation. Let's see which agents are available.
             async def is_part_of_conversation(agent):
                 context = await self.get_bot_context(turn_context.activity.conversation.id, agent["name"], turn_context)
                 typing_activity = Activity(
@@ -118,24 +150,21 @@ class AssistantBot(TeamsActivityHandler):
                     return True
                 except Exception as e:
                     logger.info(f"Failed to send typing activity to {agent['name']}: {e}")
-                    # This happens if the agent is not part of the group chat.
-                    # Remove the agent from the list of available agents
                     return False
 
             part_of_conversation = await asyncio.gather(*(is_part_of_conversation(agent) for agent in self.all_agents))
-            agents = [agent for agent, should_include in zip(self.all_agents, part_of_conversation) if should_include]
+            agents = [agent for agent, include in zip(self.all_agents, part_of_conversation) if include]
 
         (chat, chat_ctx) = create_group_chat(self.app_context, chat_ctx, participants=agents)
 
-        # Add user message to chat history
-        text = turn_context.remove_recipient_mention(turn_context.activity).strip()
-        text = f"{self.name}: {text}"
-        chat_ctx.chat_history.add_user_message(text)
+        # Add user message after context decision (no extra tagging here)
+        # chat_ctx.chat_history.add_user_message(f"{self.name}: {raw_user_text}")
+        user_with_ctx = self._append_pc_ctx(f"{self.name}: {raw_user_text}", chat_ctx)
+        chat_ctx.chat_history.add_user_message(user_with_ctx)
 
         chat.is_complete = False
         await self.process_chat(chat, chat_ctx, turn_context)
 
-        # Save chat context
         try:
             await chat_context_accessor.write(chat_ctx)
         except:
@@ -169,6 +198,17 @@ class AssistantBot(TeamsActivityHandler):
             if response.content.strip() == "":
                 continue
 
+            # msgText = self._append_links_to_msg(response.content, chat_ctx)
+
+            # Add this code right before the existing `response.content = self._append_pc_ctx(response.content, chat_ctx)` line:
+            # Record active agent in PATIENT_CONTEXT_JSON
+            # try:
+            #    self._set_system_pc_ctx_agent(chat_ctx, "active", response.name)
+            # except Exception as e:
+            #    logger.info(f"Failed to set active agent in PC_CTX: {e}")
+
+            # Attach current patient context snapshot to assistant output+
+            response.content = self._append_pc_ctx(response.content, chat_ctx)
             msgText = self._append_links_to_msg(response.content, chat_ctx)
             msgText = await self.generate_sas_for_blob_urls(msgText, chat_ctx)
 
@@ -217,3 +257,115 @@ class AssistantBot(TeamsActivityHandler):
             return msgText
         finally:
             chat_ctx.display_blob_urls = []
+
+    def _get_system_patient_context_json(self, chat_ctx: ChatContext) -> str | None:
+        """Extract the JSON payload from the current PATIENT_CONTEXT_JSON system message."""
+        for msg in chat_ctx.chat_history.messages:
+            if msg.role == AuthorRole.SYSTEM:
+                # Handle both string content and itemized content
+                content = msg.content
+                if isinstance(content, str):
+                    text = content
+                else:
+                    # Try to extract from items if content is structured
+                    items = getattr(msg, "items", None) or getattr(content, "items", None)
+                    if items:
+                        parts = []
+                        for item in items:
+                            item_text = getattr(item, "text", None) or getattr(item, "content", None)
+                            if item_text:
+                                parts.append(str(item_text))
+                        text = "".join(parts) if parts else str(content) if content else ""
+                    else:
+                        text = str(content) if content else ""
+
+                if text and text.startswith(PATIENT_CONTEXT_PREFIX):
+                    # Extract JSON after "PATIENT_CONTEXT_JSON:"
+                    json_part = text[len(PATIENT_CONTEXT_PREFIX):].strip()
+                    if json_part.startswith(":"):
+                        json_part = json_part[1:].strip()
+                    return json_part if json_part else None
+        return None
+
+    def _append_pc_ctx(self, base: str, chat_ctx: ChatContext) -> str:
+        logger.info(f"📋 PC_CTX APPEND START - Base message length: {len(base)}")
+
+        # Avoid double-tagging
+        if "\nPC_CTX" in base or "\n*PT_CTX:*" in base:
+            logger.info(f"📋 PC_CTX APPEND - Already has PC_CTX, skipping")
+            return base
+
+        # Get the actual injected system patient context JSON
+        json_payload = self._get_system_patient_context_json(chat_ctx)
+        logger.info(f"📋 PC_CTX APPEND - Retrieved JSON payload: {json_payload}")
+
+        if not json_payload:
+            logger.info(f"📋 PC_CTX APPEND - No JSON payload found, not appending context.")
+            return base
+
+        # Format the JSON payload into a simple, readable Markdown string
+        try:
+            obj = json.loads(json_payload)
+
+            lines = ["\n\n---", "\n*PT_CTX:*"]
+            if obj.get("patient_id"):
+                lines.append(f"- **Patient ID:** `{obj['patient_id']}`")
+            if obj.get("conversation_id"):
+                lines.append(f"- **Conversation ID:** `{obj['conversation_id']}`")
+
+            if obj.get("all_patient_ids"):
+                active_id = obj.get("patient_id")
+                ids_str = ", ".join(f"`{p}`{' (active)' if p == active_id else ''}" for p in obj["all_patient_ids"])
+                lines.append(f"- **Session Patients:** {ids_str}")
+
+            if obj.get("chat_summary"):
+                # Clean up summary for display
+                summary = obj['chat_summary'].replace('\n', ' ').strip()
+                if summary:
+                    lines.append(f"- **Summary:** *{summary}*")
+
+            if not obj.get("patient_id"):
+                lines.append("- *No active patient.*")
+
+            # Only add the block if there's something to show besides the header
+            if len(lines) > 2:
+                formatted_text = "\n".join(lines)
+                result = f"{base}{formatted_text}"
+                logger.info(f"📋 PC_CTX APPEND - Successfully formatted as text, final length: {len(result)}")
+                return result
+            else:
+                logger.info(f"📋 PC_CTX APPEND - No relevant data to display.")
+                return base
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"📋 PC_CTX APPEND - JSON decode error: {e}, using raw payload")
+            # Fallback to raw if JSON is malformed, but keep it simple
+            return f"{base}\n\n---\n*PT_CTX (raw):* `{json_payload}`"
+
+    def _append_pc_ctx_old(self, base: str, chat_ctx: ChatContext) -> str:
+        logger.info(f"📋 PC_CTX APPEND START - Base message length: {len(base)}")
+
+        # Avoid double-tagging
+        if "\nPC_CTX" in base:
+            logger.info(f"📋 PC_CTX APPEND - Already has PC_CTX, skipping")
+            return base
+
+        # Get the actual injected system patient context JSON
+        json_payload = self._get_system_patient_context_json(chat_ctx)
+        logger.info(f"📋 PC_CTX APPEND - Retrieved JSON payload: {json_payload}")
+
+        if not json_payload:
+            logger.info(f"📋 PC_CTX APPEND - No JSON payload found, adding empty marker")
+            return base + "\nPC_CTX <em>(empty)</em>"
+
+        # Pretty-print the actual system JSON
+        try:
+            obj = json.loads(json_payload)
+            pretty = json.dumps(obj, indent=2)
+            result = f"{base}\nPC_CTX\n<pre><code class='language-json'>{pretty}</code></pre>"
+            logger.info(f"📋 PC_CTX APPEND - Successfully formatted JSON, final length: {len(result)}")
+            return result
+        except json.JSONDecodeError as e:
+            logger.warning(f"📋 PC_CTX APPEND - JSON decode error: {e}, using raw payload")
+            # Fallback to raw if JSON is malformed
+            return f"{base}\nPC_CTX {json_payload}"
