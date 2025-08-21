@@ -47,6 +47,22 @@ class ContentExportPlugin:
         self.chat_ctx = chat_ctx
         self.data_access = data_access
         self.kernel = kernel
+        self._supports_structured = any(
+            v in os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "").lower() for v in ("gpt-4o", "gpt-4.1")
+        )
+
+    @staticmethod
+    def _safe_extract_json(text: str) -> str | None:
+        if not text:
+            return None
+        t = text.strip()
+        if t.startswith("{") and t.endswith("}"):
+            return t
+        s = t.find("{")
+        e = t.rfind("}")
+        if s != -1 and e != -1 and e > s:
+            return t[s:e + 1]
+        return None
 
     @kernel_function()
     async def export_to_word_doc(
@@ -203,12 +219,25 @@ class ContentExportPlugin:
         chat_history.add_system_message("You have access to the following patient history:\n" + json.dumps(entries))
 
         # Generate timeline
-        # https://devblogs.microsoft.com/semantic-kernel/using-json-schema-for-structured-output-in-python-for-openai-models/
-        settings = AzureChatPromptExecutionSettings(temperature=0.0, response_format=ClinicalSummary)
+        # Prefer structured outputs when available; otherwise instruct strict JSON and parse.
+        if not self._supports_structured:
+            schema = ClinicalSummary.model_json_schema()
+            chat_history.add_system_message(
+                "Respond strictly in JSON matching this JSON Schema. Do not include explanations or markdown.\n" +
+                json.dumps(schema)
+            )
+            settings = AzureChatPromptExecutionSettings(temperature=0.0)
+        else:
+            settings = AzureChatPromptExecutionSettings(temperature=0.0, response_format=ClinicalSummary)
         chat_completion_service = self.kernel.get_service(service_id="default")
         chat_resp = await chat_completion_service.get_chat_message_content(chat_history=chat_history, settings=settings)
 
-        clinical_summary = json.loads(chat_resp.content)
+        content = chat_resp.content
+        json_text = self._safe_extract_json(content)
+        if not json_text:
+            logger.error("Failed to extract JSON for ClinicalSummary; content begins: %s", content[:200])
+            raise ValueError("Model did not return valid JSON for ClinicalSummary")
+        clinical_summary = json.loads(json_text)
         return clinical_summary.get("entries", [])
 
     def _get_research_papers(self, doc: DocxTemplate, research_papers: dict) -> list[dict]:

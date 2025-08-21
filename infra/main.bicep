@@ -34,13 +34,13 @@ param appPlanName string = ''
 param appName string = ''
 
 @description('Gen AI model name and version to deploy')
-@allowed(['gpt-4o;2024-08-06', 'gpt-4.1;2025-04-14'])
+@allowed(['gpt-4o;2024-08-06', 'gpt-4.1;2025-04-14', 'gpt-5-chat;2025-08-07'])
 param model string
 @description('Tokens per minute capacity for the model. Units of 1000 (capacity = 100 means 100K tokens per minute)')
 param modelCapacity int
 // https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/deployment-types
 @description('Specify the deployment type of the model. Only allow deployment types where data processing and data storage is within the specified Azure geography.')
-@allowed(['Standard', 'DataZoneStandard'])
+@allowed(['DataZoneStandard', 'Standard', 'GlobalStandard'])
 param modelSku string
 
 @description('Location to deploy AI Services')

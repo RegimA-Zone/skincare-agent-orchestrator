@@ -47,6 +47,24 @@ class PatientDataPlugin:
         self.kernel = kernel
         self.data_access = data_access
 
+    @staticmethod
+    def _supports_structured_outputs() -> bool:
+        deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "").lower()
+        return any(v in deployment for v in ("gpt-4o", "gpt-4.1"))
+
+    @staticmethod
+    def _safe_extract_json(text: str) -> str | None:
+        if not text:
+            return None
+        text = text.strip()
+        if text.startswith("{") and text.endswith("}"):
+            return text
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return text[start:end + 1]
+        return None
+
     @kernel_function(
         description="Load patient images and reports from data store. The output will contain a list of files with name and type."
     )
@@ -113,13 +131,26 @@ class PatientDataPlugin:
         # Add patient history
         chat_history.add_system_message("You have access to the following patient history:\n" + json.dumps(files))
 
+        # If structured outputs unsupported, guide the model to emit strict JSON matching the schema
+        if not self._supports_structured_outputs():
+            schema = PatientTimeline.model_json_schema()
+            chat_history.add_system_message(
+                "Respond strictly in JSON matching this JSON Schema. Do not include explanations or markdown.\n" +
+                json.dumps(schema)
+            )
+
         # Generate timeline
         # https://devblogs.microsoft.com/semantic-kernel/using-json-schema-for-structured-output-in-python-for-openai-models/
         settings = self._get_chat_prompt_exec_settings(PatientTimeline)
         chat_resp = await chat_completion_service.get_chat_message_content(chat_history=chat_history, settings=settings)
 
         # Parse the response to PatientTimeline object
-        timeline = PatientTimeline.model_validate_json(chat_resp.content)
+        content = chat_resp.content
+        json_text = self._safe_extract_json(content)
+        if not json_text:
+            logger.error("Failed to extract JSON for PatientTimeline; content begins: %s", content[:200])
+            raise ValueError("Model did not return valid JSON for PatientTimeline")
+        timeline = PatientTimeline.model_validate_json(json_text)
         timeline.patient_id = patient_id
 
         # Save patient timeline
@@ -175,11 +206,23 @@ class PatientDataPlugin:
         chat_history.add_system_message(prompt)
 
         chat_completion_service: AzureChatCompletion = self.kernel.get_service(service_id="default")
+        # If structured outputs unsupported, add schema instruction
+        if not self._supports_structured_outputs():
+            schema = PatientDataAnswer.model_json_schema()
+            chat_history.add_system_message(
+                "Respond strictly in JSON matching this JSON Schema. Do not include explanations or markdown.\n" +
+                json.dumps(schema)
+            )
         settings = self._get_chat_prompt_exec_settings(PatientDataAnswer)
         chat_resp = await chat_completion_service.get_chat_message_content(chat_history=chat_history, settings=settings)
 
         # Parse the response to PatientDataAnswer object
-        answer = PatientDataAnswer.model_validate_json(chat_resp.content)
+        content = chat_resp.content
+        json_text = self._safe_extract_json(content)
+        if not json_text:
+            logger.error("Failed to extract JSON for PatientDataAnswer; content begins: %s", content[:200])
+            raise ValueError("Model did not return valid JSON for PatientDataAnswer")
+        answer = PatientDataAnswer.model_validate_json(json_text)
         answer_id = str(uuid4())
 
         # Save PatientDataAnswer
@@ -212,8 +255,15 @@ class PatientDataPlugin:
 
     @staticmethod
     def _get_chat_prompt_exec_settings(response_format) -> AzureChatPromptExecutionSettings:
-        return AzureChatPromptExecutionSettings(
-            response_format=response_format,
-            temperature=0.0,
-            seed=42
-        )
+        # Only set response_format when supported; otherwise rely on instruction + parsing fallback
+        if PatientDataPlugin._supports_structured_outputs():
+            return AzureChatPromptExecutionSettings(
+                response_format=response_format,
+                temperature=0.0,
+                seed=42
+            )
+        else:
+            return AzureChatPromptExecutionSettings(
+                temperature=0.0,
+                seed=42
+            )

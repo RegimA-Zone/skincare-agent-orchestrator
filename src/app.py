@@ -32,7 +32,7 @@ from routes.views.patient_timeline_routes import patient_timeline_entry_source_r
 load_dotenv(".env")
 
 # Setup default logging and minimum log level severity for your environment that you want to consume
-log_level = logging.INFO
+log_level = logging.DEBUG
 setup_logging(log_level=log_level)
 
 

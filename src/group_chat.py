@@ -39,6 +39,32 @@ class ChatRule(BaseModel):
     reasoning: str
 
 
+def _supports_structured_outputs() -> bool:
+    """Return True if the current default deployment is known to support json_schema response_format."""
+    # Allow override via env var
+    if os.environ.get("DISABLE_STRUCTURED_OUTPUTS", "").lower() in ("1", "true", "yes"):  # pragma: no cover - env gate
+        return False
+    # Heuristic: structured outputs are supported on gpt-4o and gpt-4.1; not on gpt-5-chat as of now.
+    deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "").lower()
+    return any(v in deployment for v in ("gpt-4o", "gpt-4.1"))
+
+
+def _safe_extract_json(text: str) -> str | None:
+    """Try to extract a JSON object from arbitrary text; return the JSON string or None."""
+    if not text:
+        return None
+    text = text.strip()
+    # If already looks like JSON
+    if text.startswith("{") and text.endswith("}"):
+        return text
+    # Try to find the first '{' and the last '}' and slice
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start:end + 1]
+    return None
+
+
 def create_auth_callback(chat_ctx: ChatContext) -> Callable[..., Awaitable[Any]]:
     """
     Creates an authentication callback for the plugin configuration.
@@ -114,13 +140,22 @@ def create_group_chat(
                 raise ValueError(f"Unknown tool type: {tool_type}")
 
         temperature = agent_config.get("temperature", DEFAULT_MODEL_TEMP)
-        settings = AzureChatPromptExecutionSettings(
-            function_choice_behavior=FunctionChoiceBehavior.Auto(), temperature=temperature, seed=42)
+        # Avoid structured outputs on models that don't support it (e.g., gpt-5-chat)
+        if _supports_structured_outputs():
+            settings = AzureChatPromptExecutionSettings(
+                function_choice_behavior=FunctionChoiceBehavior.Auto(), temperature=temperature, seed=42
+            )
+        else:
+            settings = AzureChatPromptExecutionSettings(
+                function_choice_behavior=FunctionChoiceBehavior.Auto(), temperature=temperature, seed=42
+            )
         arguments = KernelArguments(settings=settings)
         instructions = agent_config.get("instructions")
         if agent_config.get("facilitator") and instructions:
             instructions = instructions.replace(
-                "{{aiAgents}}", "\n\t\t".join([f"- {agent['name']}: {agent["description"]}" for agent in all_agents_config]))
+                "{{aiAgents}}",
+                "\n\t\t".join([f"- {agent['name']}: {agent['description']}" for agent in all_agents_config])
+            )
 
         return (ChatCompletionAgent(service_id="default",
                                     kernel=agent_kernel,
@@ -131,12 +166,24 @@ def create_group_chat(
                                 chat_ctx=chat_ctx,
                                 app_ctx=app_ctx))
 
-    settings = AzureChatPromptExecutionSettings(
-        function_choice_behavior=FunctionChoiceBehavior.Auto(), temperature=DEFAULT_MODEL_TEMP, seed=42, response_format=ChatRule)
+    # Selection/termination optionally use structured outputs. Fall back to text parsing for unsupported models.
+    if _supports_structured_outputs():
+        settings = AzureChatPromptExecutionSettings(
+            function_choice_behavior=FunctionChoiceBehavior.Auto(), temperature=DEFAULT_MODEL_TEMP, seed=42, response_format=ChatRule
+        )
+    else:
+        settings = AzureChatPromptExecutionSettings(
+            function_choice_behavior=FunctionChoiceBehavior.Auto(), temperature=DEFAULT_MODEL_TEMP, seed=42
+        )
     arguments = KernelArguments(settings=settings)
 
     facilitator_agent = next((agent for agent in all_agents_config if agent.get("facilitator")), all_agents_config[0])
     facilitator = facilitator_agent["name"]
+    json_instruction = (
+        'Return the result strictly as a JSON object of the form {"verdict": "<VALUE>", "reasoning": "<WHY>"} with no extra text or markdown.'
+        if not _supports_structured_outputs() else ''
+    )
+
     selection_function = KernelFunctionFromPrompt(
         function_name="selection",
         prompt=f"""
@@ -158,12 +205,18 @@ def create_group_chat(
             - **Default to {facilitator}**: Always default to {facilitator}. If no other participant is specified, {facilitator} goes next.
             - **Use best judgment**: If the rules are unclear, use your best judgment to determine who should go next, for the natural flow of the conversation.
             
-        **Output**: Give the full reasoning for your choice and the verdict. The reasoning should include careful evaluation of each rule with an explanation. The verdict should be the name of the participant who should go next.
+    **Output**: Give the full reasoning for your choice and the verdict. The reasoning should include careful evaluation of each rule with an explanation. The verdict should be the name of the participant who should go next.
+    {json_instruction}
 
         History:
         {{{{$history}}}}
         """,
         prompt_execution_settings=settings
+    )
+
+    termination_json_instruction = (
+        'Return the result strictly as a JSON object of the form {"verdict": "yes|no", "reasoning": "<WHY>"} with no extra text or markdown.'
+        if not _supports_structured_outputs() else ''
     )
 
     termination_function = KernelFunctionFromPrompt(
@@ -173,6 +226,7 @@ def create_group_chat(
         You only have access to the last message in the conversation.
 
         Reply by giving your full reasoning, and the verdict. The verdict should be either "yes" or "no".
+        {termination_json_instruction}
 
         You are part of a group chat with several AI agents and a user. 
         The agents are names are: 
@@ -202,13 +256,41 @@ def create_group_chat(
 
     def evaluate_termination(result):
         logger.info(f"Termination function result: {result}")
-        rule = ChatRule.model_validate_json(str(result.value[0]))
-        return rule.verdict == "yes"
+        raw = str(result.value[0])
+        json_text = _safe_extract_json(raw)
+        if json_text:
+            try:
+                rule = ChatRule.model_validate_json(json_text)
+                return rule.verdict.strip().lower() == "yes"
+            except Exception:
+                pass
+        # Fallback heuristic parsing when structured outputs unsupported
+        lowered = raw.strip().lower()
+        # Look for explicit verdict markers
+        if "verdict" in lowered and "yes" in lowered:
+            return True
+        if "verdict" in lowered and "no" in lowered:
+            return False
+        # Otherwise default to conservative end = True to avoid loops, mirroring previous logic guidance
+        return True
 
     def evaluate_selection(result):
         logger.info(f"Selection function result: {result}")
-        rule = ChatRule.model_validate_json(str(result.value[0]))
-        return rule.verdict if rule.verdict in [agent["name"] for agent in all_agents_config] else facilitator
+        raw = str(result.value[0])
+        json_text = _safe_extract_json(raw)
+        valid_names = [agent["name"] for agent in all_agents_config]
+        if json_text:
+            try:
+                rule = ChatRule.model_validate_json(json_text)
+                return rule.verdict if rule.verdict in valid_names else facilitator
+            except Exception:
+                pass
+        # Fallback: try to find a valid agent name mentioned last in the text
+        for name in valid_names:
+            if name in raw:
+                chosen = name
+        # If none matched, default to facilitator per instructions
+        return locals().get("chosen", facilitator)
 
     chat = AgentGroupChat(
         agents=agents,
