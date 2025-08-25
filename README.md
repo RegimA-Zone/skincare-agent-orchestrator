@@ -1,21 +1,21 @@
-# Healthcare Agent Orchestrator
-Healthcare Agent Orchestrator is a multi-agent accelerator that coordinates modular specialized agents across diverse data types and tools like M365 and Teams to assist multi-disciplinary healthcare workflows—such as cancer care. 
+# Skincare Agent Orchestrator
+Skincare Agent Orchestrator is a multi-agent accelerator that coordinates modular specialized agents across diverse data types and tools like M365 and Teams to assist multi-disciplinary skincare workflows—such as dermatological consultations and cosmetic treatments.
 
 This repository contains comprehensive information to help you get started.
 
 > [!IMPORTANT]
-Healthcare Agent Orchestrator is a code sample to help you build an agent intended for research and development use only. Healthcare Agent Orchestrator is not designed or intended to be deployed in clinical settings as-is nor is it intended for use in the diagnosis or treatment of any health or medical condition, and its performance for such purposes has not been established. By using the Healthcare Agent Orchestrator sample, you are acknowledging that you bear sole responsibility and liability for any use of Healthcare Agent Orchestrator, including verification of outputs and incorporation into any product or service intended for a medical purpose or to inform clinical decision-making, compliance with applicable healthcare laws and regulations, and obtaining any necessary clearances or approvals.
+Skincare Agent Orchestrator is a code sample to help you build an agent intended for research and development use only. Healthcare Agent Orchestrator is not designed or intended to be deployed in clinical settings as-is nor is it intended for use in the diagnosis or treatment of any health or medical condition, and its performance for such purposes has not been established. By using the Skincare Agent Orchestrator sample, you are acknowledging that you bear sole responsibility and liability for any use of Skincare Agent Orchestrator, including verification of outputs and incorporation into any product or service intended for a medical purpose or to inform clinical decision-making, compliance with applicable healthcare laws and regulations, and obtaining any necessary clearances or approvals.
 
 ## Features
 
-- Demonstrates the use of the Healthcare Agent Orchestrator for solving complex tasks.
-- Facilitates modular and scalable agent-based solutions for diverse healthcare needs.
-- Provides tools for creating and managing specialized agents for specific tasks.
-- Showcases the application of multi-model AI in healthcare scenarios.
+- Demonstrates the use of the Skincare Agent Orchestrator for solving complex skincare tasks.
+- Facilitates modular and scalable agent-based solutions for diverse skincare and dermatological needs.
+- Provides tools for creating and managing specialized agents for specific skincare tasks.
+- Showcases the application of multi-model AI in dermatological scenarios.
 - Supports adding your own data for agents to process and analyze.
 - Integrates with Copilot Studio through Microsoft Cloud for Healthcare.
 - Enables integration with Microsoft Teams for collaborative workflows.
-- Highlights interoperability with Azure services and AI models such as [CxrReportGen](https://ai.azure.com/explore/models/CxrReportGen/version/7/registry/azureml).
+- Highlights interoperability with Azure services and AI models for dermatological analysis.
 
 ## Solution Architecture
 ![Solution Architecture](media/architecture.png)
@@ -25,13 +25,13 @@ For each agent defined in `agents.yaml`, an Azure bot and associated Teams app a
 ## AI Agent Role Summaries
 
 - Orchestrator: Facilitates the conversation between the user and all expert agents. Determines the order of responses, gathers required information, and ensures agents yield control back after completing their tasks.
-- Patient History: Loads and presents the patient's full clinical timeline using structured data tools. Answers questions about medical history but does not interpret images or make clinical recommendations.
-- Radiology: Analyzes chest x-ray images using the CXRReportGen model and compares findings to the patient's history. Does not support other imaging modalities like CT or pathology.
-- Patient Status: Provides a structured summary of the patient’s current clinical status including stage, biomarkers, and performance score. Requests missing details from PatientHistory if needed.
-- Clinical Guidelines: Generates a structured treatment plan based on patient status using clinical guidelines and biomarker rationale. Recommends therapy adjustments and progression contingencies.
-- Report Creation: Compiles a comprehensive tumor board Word document using all previously gathered information. Does not summarize or interpret; simply assembles validated agent outputs.
-- Clinical Trials: Searches for and presents relevant clinical trials based on patient characteristics and prior treatments. Filters only for trials the patient is eligible for and formats them clearly.
-- Medical Research: Retrieves research-backed insights using Microsoft GraphRAG. Responses include unaltered source references and links, focusing strictly on verified data.
+- Skin History: Loads and presents the patient's full skincare and dermatological timeline using structured data tools. Answers questions about skin history but does not interpret images or make clinical recommendations.
+- Dermatology: Analyzes skin images including photos and dermoscopy using specialized dermatological AI models and compares findings to the patient's skin history. Supports various skin imaging modalities.
+- Skin Assessment: Provides a structured summary of the patient’s current skin condition including skin type, concerns, and sensitivities. Requests missing details from SkinHistory if needed.
+- Skincare Plan: Generates a structured skincare treatment plan based on skin assessment using dermatological guidelines and condition-specific rationale. Recommends product adjustments and alternative options.
+- Report Creation: Compiles a comprehensive dermatological consultation Word document using all previously gathered information. Does not summarize or interpret; simply assembles validated agent outputs.
+- Skincare Research: Searches for and presents relevant skincare treatments and research based on patient skin characteristics and concerns. Filters for suitable treatments and formats them clearly.
+- Dermatology Research: Retrieves dermatology research-backed insights using Microsoft GraphRAG. Responses include unaltered source references and links, focusing strictly on verified data.
 
 ## Getting Started
 

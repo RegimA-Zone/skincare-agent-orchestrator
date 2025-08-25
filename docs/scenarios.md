@@ -1,7 +1,10 @@
 # Scenarios
 
 Acumen supports implementing different scenarios side-by-side as a way to quickly create new flows and experiences.
-The default scenario we support is a cancer care scenario, where a group of agents is tasked with answering questions about patient care that could come up during a tumor board review.
+The scenarios we support include:
+- `default`: A cancer care scenario where agents assist with tumor board reviews  
+- `skincare`: A dermatological scenario where agents assist with skincare consultations and treatment planning
+
 We encourage you to create brand new scenarios that you can install. Simply create a new folder under scenarios. Specify at the minimum a `config/agents.yaml` file and a `requirements.txt` file.
 At least one agent in your YAML file should be marked as the facilitator (`facilitator: true`).
 Optionally, you can create tools under a tools directory. Those would be made available to your group chat.
@@ -12,10 +15,15 @@ To select your scenario, run
 azd env set SCENARIO <scenario>
 ```
 
+For example, to use the skincare scenario:
+```
+azd env set SCENARIO skincare
+```
+
 Then run `azd up` to configure and deploy your scenario.
 
 > [!NOTE]
-> Only one scenario is available currently: `default`. Follow the below instructions to add additional scenarios.
+> Available scenarios: `default` (cancer care) and `skincare` (dermatological consultations). Follow the below instructions to add additional scenarios.
 
 ## Scenario Folder Structure
 
