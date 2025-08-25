@@ -23,8 +23,8 @@ class MedImageInsightPlugin:
         self.url = config.agent_config["hls_model_endpoint"].get("med_image_insight")
         self.root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    @kernel_function(description="Calculates the likelihood that a tumor is malignant")
-    async def tumor_malignant(self, patient_id: str, filename: str, prompt: str):
+    @kernel_function(description="Calculates the likelihood that a skin lesion is malignant")
+    async def skin_lesion_malignant(self, patient_id: str, filename: str, prompt: str):
         image_stream = await self.data_access.image_accessor.read(patient_id, filename)
         base64_image = base64.b64encode(image_stream.read()).decode("utf-8")
         body = {

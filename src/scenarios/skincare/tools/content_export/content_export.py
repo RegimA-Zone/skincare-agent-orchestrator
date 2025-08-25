@@ -27,8 +27,8 @@ from routes.patient_data.patient_data_routes import get_chat_artifacts_url
 
 from .timeline_image import create_timeline_images_by_height
 
-OUTPUT_DOC_FILENAME = "tumor_board_review-{}.docx"
-TEMPLATE_DOC_FILENAME = "tumor_board_template.docx"
+OUTPUT_DOC_FILENAME = "dermatology_consultation-{}.docx"
+TEMPLATE_DOC_FILENAME = "dermatology_consultation_template.docx"
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +188,7 @@ class ContentExportPlugin:
 
         # Add instructions
         chat_history.add_system_message(
-            "Create a clinical summary of a cancer patient for tumor board review. Summarize each entry in a concise manner, " +
+            "Create a clinical summary of a skincare patient for dermatological consultation. Summarize each entry in a concise manner, " +
             f"highlighting key points. Limit the summary to {max_entries} entries.")
 
         # Add patient history
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export content to Word document.")
     parser.add_argument("input", help="Path to the JSON file containing the data.")
     parser.add_argument("patient_data", help="Path to the JSON file containing the patient data.")
-    parser.add_argument('output', default="tumor_board.docx", nargs='?', help='Path to output word document')
+    parser.add_argument('output', default="dermatology_consultation.docx", nargs='?', help='Path to output word document')
     args = parser.parse_args()
 
     with open(args.input, "r") as f:

@@ -66,8 +66,8 @@ class MedImageParsePlugin:
         self.url = config.agent_config["hls_model_endpoint"].get("med_image_parse")
         self.root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    @kernel_function(description="Calculates the tumor size")
-    async def calculate_tumor_size(self, patient_id: str, filename: str, prompt: str):
+    @kernel_function(description="Calculates the skin lesion size")
+    async def calculate_lesion_size(self, patient_id: str, filename: str, prompt: str):
         image_stream = await self.data_access.image_accessor.read(patient_id, filename)
         base64_image = base64.b64encode(image_stream.read()).decode("utf-8")
         body = {

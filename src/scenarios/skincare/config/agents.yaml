@@ -178,5 +178,3 @@
     - name: graph_rag
   description: |
     A DermatologyResearch agent. You provide dermatology and skincare research-related information. **You provide**: research-related information about skin conditions, treatments, and skincare. **You need**: a keyword or topic to search for, likely based on patient skin assessment or treatment plan.
-
-- name: magentic
